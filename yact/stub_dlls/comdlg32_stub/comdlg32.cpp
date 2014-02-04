@@ -1,0 +1,25 @@
+#include "dllstub_def.h"
+
+static const char DLL_NAME[]="comdlg32.nt.dll";
+
+DEFINE_FUNC1(ChooseColorA)
+DEFINE_FUNC1(ChooseColorW)
+DEFINE_FUNC1(ChooseFontA)
+DEFINE_FUNC1(ChooseFontW)
+DEFINE_FUNC0(CommDlgExtendedError)
+DEFINE_FUNC1(FindTextA)
+DEFINE_FUNC1(FindTextW)
+DEFINE_FUNC3(GetFileTitleA)
+DEFINE_FUNC3(GetFileTitleW)
+DEFINE_FUNC1(GetOpenFileNameA)
+DEFINE_FUNC1(GetOpenFileNameW)
+DEFINE_FUNC1(GetSaveFileNameA)
+DEFINE_FUNC1(GetSaveFileNameW)
+DEFINE_FUNC1(PageSetupDlgA)
+DEFINE_FUNC1(PageSetupDlgW)
+DEFINE_FUNC1(PrintDlgA)
+DEFINE_FUNC1(PrintDlgExA)
+DEFINE_FUNC1(PrintDlgExW)
+DEFINE_FUNC1(PrintDlgW)
+DEFINE_FUNC1(ReplaceTextA)
+DEFINE_FUNC1(ReplaceTextW)

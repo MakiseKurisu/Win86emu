@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 11
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EXE_Stub", "EXE_Stub.vcxproj", "{8528311B-63F6-4225-845D-85CD15C21843}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|ARM = Debug|ARM
+		Debug|Win32 = Debug|Win32
+		Release|ARM = Release|ARM
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8528311B-63F6-4225-845D-85CD15C21843}.Debug|ARM.ActiveCfg = Debug|ARM
+		{8528311B-63F6-4225-845D-85CD15C21843}.Debug|ARM.Build.0 = Debug|ARM
+		{8528311B-63F6-4225-845D-85CD15C21843}.Debug|Win32.ActiveCfg = Debug|Win32
+		{8528311B-63F6-4225-845D-85CD15C21843}.Debug|Win32.Build.0 = Debug|Win32
+		{8528311B-63F6-4225-845D-85CD15C21843}.Release|ARM.ActiveCfg = Release|ARM
+		{8528311B-63F6-4225-845D-85CD15C21843}.Release|ARM.Build.0 = Release|ARM
+		{8528311B-63F6-4225-845D-85CD15C21843}.Release|Win32.ActiveCfg = Release|Win32
+		{8528311B-63F6-4225-845D-85CD15C21843}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

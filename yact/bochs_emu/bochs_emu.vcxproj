@@ -1,0 +1,365 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|ARM">
+      <Configuration>Debug</Configuration>
+      <Platform>ARM</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM">
+      <Configuration>Release</Configuration>
+      <Platform>ARM</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{BC923A4F-7A44-4466-BB58-1B33A9F151B1}</ProjectGuid>
+    <RootNamespace>bochs_emu</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v110</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v110</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v110</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v110</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>11.0.50727.1</_ProjectFileVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(Configuration)\</IntDir>
+    <LinkIncremental>true</LinkIncremental>
+    <IncludePath>$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSDK_IncludePath);U:\DynamicTranslator\yact\inc;U:\DynamicTranslator\yact\</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">
+    <LinkIncremental>true</LinkIncremental>
+    <IncludePath>$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSDK_IncludePath);U:\DynamicTranslator\yact\inc;U:\DynamicTranslator\yact\</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(Configuration)\</IntDir>
+    <LinkIncremental>false</LinkIncremental>
+    <IncludePath>$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSDK_IncludePath);U:\DynamicTranslator\yact\inc;U:\DynamicTranslator\yact\</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">
+    <LinkIncremental>false</LinkIncremental>
+    <IncludePath>$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSDK_IncludePath);U:\DynamicTranslator\yact\inc;U:\DynamicTranslator\yact\</IncludePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>U:\DynamicTranslator\yact\bochs_emu\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;DOSBOX_EMU_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>true</MinimalRebuild>
+      <ExceptionHandling />
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>U:\DynamicTranslator\yact\bochs_emu\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;DOSBOX_EMU_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>true</MinimalRebuild>
+      <ExceptionHandling>
+      </ExceptionHandling>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <FloatingPointModel>Fast</FloatingPointModel>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies>kernel32.lib;user32.lib;%(AdditionalDependencies);advapi32.lib</AdditionalDependencies>
+      <StackReserveSize>3145728</StackReserveSize>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <AdditionalIncludeDirectories>U:\DynamicTranslator\yact\bochs_emu\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;DOSBOX_EMU_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ExceptionHandling />
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <AdditionalIncludeDirectories>U:\DynamicTranslator\yact\bochs_emu\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;DOSBOX_EMU_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ExceptionHandling>
+      </ExceptionHandling>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <AdditionalOptions>/arch:ARMv7VE /GA %(AdditionalOptions)</AdditionalOptions>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <FloatingPointExceptions>false</FloatingPointExceptions>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <OmitFramePointers>true</OmitFramePointers>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <AdditionalDependencies>kernel32.lib;user32.lib;%(AdditionalDependencies);advapi32.lib</AdditionalDependencies>
+      <StackReserveSize>3145728</StackReserveSize>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="cpu\3dnow.cpp" />
+    <ClCompile Include="cpu\access.cpp" />
+    <ClCompile Include="cpu\access32.cpp" />
+    <ClCompile Include="cpu\access64.cpp" />
+    <ClCompile Include="cpu\aes.cpp" />
+    <ClCompile Include="cpu\apic.cpp" />
+    <ClCompile Include="cpu\arith16.cpp" />
+    <ClCompile Include="cpu\arith32.cpp" />
+    <ClCompile Include="cpu\arith64.cpp" />
+    <ClCompile Include="cpu\arith8.cpp" />
+    <ClCompile Include="cpu\bcd.cpp" />
+    <ClCompile Include="cpu\bit.cpp" />
+    <ClCompile Include="cpu\bit16.cpp" />
+    <ClCompile Include="cpu\bit32.cpp" />
+    <ClCompile Include="cpu\bit64.cpp" />
+    <ClCompile Include="bochs_test.cpp" />
+    <ClCompile Include="cpu\call_far.cpp" />
+    <ClCompile Include="config.cpp" />
+    <ClCompile Include="cpu\cpu.cpp" />
+    <ClCompile Include="cpu\cpuid.cpp" />
+    <ClCompile Include="cpu\crc32.cpp" />
+    <ClCompile Include="cpu\crregs.cpp" />
+    <ClCompile Include="cpu\ctrl_xfer16.cpp" />
+    <ClCompile Include="cpu\ctrl_xfer32.cpp" />
+    <ClCompile Include="cpu\ctrl_xfer64.cpp" />
+    <ClCompile Include="cpu\ctrl_xfer_pro.cpp" />
+    <ClCompile Include="cpu\data_xfer16.cpp" />
+    <ClCompile Include="cpu\data_xfer32.cpp" />
+    <ClCompile Include="cpu\data_xfer64.cpp" />
+    <ClCompile Include="cpu\data_xfer8.cpp" />
+    <ClCompile Include="cpu\debugstuff.cpp" />
+    <ClCompile Include="disasm\dis_decode.cpp" />
+    <ClCompile Include="disasm\dis_groups.cpp" />
+    <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="cpu\exception.cpp" />
+    <ClCompile Include="fpu\f2xm1.cpp" />
+    <ClCompile Include="fpu\ferr.cpp" />
+    <ClCompile Include="cpu\fetchdecode.cpp" />
+    <ClCompile Include="cpu\fetchdecode64.cpp" />
+    <ClCompile Include="cpu\flag_ctrl.cpp" />
+    <ClCompile Include="cpu\flag_ctrl_pro.cpp" />
+    <ClCompile Include="fpu\fpatan.cpp" />
+    <ClCompile Include="fpu\fprem.cpp" />
+    <ClCompile Include="fpu\fpu.cpp" />
+    <ClCompile Include="fpu\fpu_arith.cpp" />
+    <ClCompile Include="fpu\fpu_compare.cpp" />
+    <ClCompile Include="fpu\fpu_const.cpp" />
+    <ClCompile Include="cpu\fpu_emu.cpp" />
+    <ClCompile Include="fpu\fpu_load_store.cpp" />
+    <ClCompile Include="fpu\fpu_misc.cpp" />
+    <ClCompile Include="fpu\fpu_tags.cpp" />
+    <ClCompile Include="fpu\fpu_trans.cpp" />
+    <ClCompile Include="fpu\fsincos.cpp" />
+    <ClCompile Include="fpu\fyl2x.cpp" />
+    <ClCompile Include="cpu\icache.cpp" />
+    <ClCompile Include="cpu\init.cpp" />
+    <ClCompile Include="cpu\io.cpp" />
+    <ClCompile Include="cpu\iret.cpp" />
+    <ClCompile Include="cpu\jmp_far.cpp" />
+    <ClCompile Include="cpu\lazy_flags.cpp" />
+    <ClCompile Include="cpu\load.cpp" />
+    <ClCompile Include="cpu\logical16.cpp" />
+    <ClCompile Include="cpu\logical32.cpp" />
+    <ClCompile Include="cpu\logical64.cpp" />
+    <ClCompile Include="cpu\logical8.cpp" />
+    <ClCompile Include="interlock.cpp" />
+    <ClCompile Include="logio.cpp" />
+    <ClCompile Include="cpu\mmx.cpp" />
+    <ClCompile Include="cpu\msr.cpp" />
+    <ClCompile Include="cpu\mult16.cpp" />
+    <ClCompile Include="cpu\mult32.cpp" />
+    <ClCompile Include="cpu\mult64.cpp" />
+    <ClCompile Include="cpu\mult8.cpp" />
+    <ClCompile Include="cpu\paging.cpp" />
+    <ClCompile Include="gui\paramtree.cpp" />
+    <ClCompile Include="pc_system.cpp" />
+    <ClCompile Include="fpu\poly.cpp" />
+    <ClCompile Include="cpu\proc_ctrl.cpp" />
+    <ClCompile Include="cpu\protect_ctrl.cpp" />
+    <ClCompile Include="disasm\resolve.cpp" />
+    <ClCompile Include="cpu\resolver.cpp" />
+    <ClCompile Include="cpu\ret_far.cpp" />
+    <ClCompile Include="cpu\segment_ctrl.cpp" />
+    <ClCompile Include="cpu\segment_ctrl_pro.cpp" />
+    <ClCompile Include="cpu\shift16.cpp" />
+    <ClCompile Include="cpu\shift32.cpp" />
+    <ClCompile Include="cpu\shift64.cpp" />
+    <ClCompile Include="cpu\shift8.cpp" />
+    <ClCompile Include="gui\siminterface.cpp" />
+    <ClCompile Include="cpu\smm.cpp" />
+    <ClCompile Include="cpu\soft_int.cpp" />
+    <ClCompile Include="fpu\softfloat-round-pack.cpp" />
+    <ClCompile Include="fpu\softfloat-specialize.cpp" />
+    <ClCompile Include="fpu\softfloat.cpp" />
+    <ClCompile Include="fpu\softfloatx80.cpp" />
+    <ClCompile Include="cpu\sse.cpp" />
+    <ClCompile Include="cpu\sse_move.cpp" />
+    <ClCompile Include="cpu\sse_pfp.cpp" />
+    <ClCompile Include="cpu\sse_rcp.cpp" />
+    <ClCompile Include="cpu\sse_string.cpp" />
+    <ClCompile Include="cpu\stack16.cpp" />
+    <ClCompile Include="cpu\stack32.cpp" />
+    <ClCompile Include="cpu\stack64.cpp" />
+    <ClCompile Include="stdafx.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="cpu\string.cpp" />
+    <ClCompile Include="disasm\syntax.cpp" />
+    <ClCompile Include="cpu\tasking.cpp" />
+    <ClCompile Include="gui\textconfig.cpp" />
+    <ClCompile Include="cpu\vm8086.cpp" />
+    <ClCompile Include="cpu\vmcs.cpp" />
+    <ClCompile Include="cpu\vmexit.cpp" />
+    <ClCompile Include="cpu\vmx.cpp" />
+    <ClCompile Include="cpu\xsave.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="cpu\apic.h" />
+    <ClInclude Include="fpu\control_w.h" />
+    <ClInclude Include="cpu\cpu.h" />
+    <ClInclude Include="cpu\crregs.h" />
+    <ClInclude Include="cpu\descriptor.h" />
+    <ClInclude Include="disasm\dis_tables.h" />
+    <ClInclude Include="disasm\disasm.h" />
+    <ClInclude Include="cpu\fetchdecode.h" />
+    <ClInclude Include="cpu\fetchdecode_sse.h" />
+    <ClInclude Include="cpu\fetchdecode_x87.h" />
+    <ClInclude Include="fpu\fpu_constant.h" />
+    <ClInclude Include="cpu\i387.h" />
+    <ClInclude Include="cpu\ia_opcodes.h" />
+    <ClInclude Include="cpu\icache.h" />
+    <ClInclude Include="cpu\instr.h" />
+    <ClInclude Include="cpu\lazy_flags.h" />
+    <ClInclude Include="cpu\model_specific.h" />
+    <ClInclude Include="cpu\smm.h" />
+    <ClInclude Include="fpu\softfloat-compare.h" />
+    <ClInclude Include="fpu\softfloat-macros.h" />
+    <ClInclude Include="fpu\softfloat-round-pack.h" />
+    <ClInclude Include="fpu\softfloat-specialize.h" />
+    <ClInclude Include="fpu\softfloat.h" />
+    <ClInclude Include="fpu\softfloatx80.h" />
+    <ClInclude Include="cpu\stack.h" />
+    <ClInclude Include="fpu\status_w.h" />
+    <ClInclude Include="fpu\tag_w.h" />
+    <ClInclude Include="cpu\vmx.h" />
+    <ClInclude Include="cpu\xmm.h" />
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="targetver.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="disasm\dis_tables.inc" />
+    <None Include="disasm\dis_tables_sse.inc" />
+    <None Include="disasm\dis_tables_x87.inc" />
+    <None Include="disasm\opcodes.inc" />
+    <None Include="fpu\todo" />
+    <None Include="cpu\todo" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="ReadMe.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\cbacks\cbacks.vcxproj">
+      <Project>{ee3bef7a-bd4e-43bd-b55a-989a2ae71018}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+    <ProjectReference Include="..\peldr\peldr.vcxproj">
+      <Project>{f4068177-8367-4d29-afc8-fab7851fcfdb}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+    <ProjectReference Include="..\supp\supp.vcxproj">
+      <Project>{fc1b34a9-985f-480e-8d3c-02f593a6e100}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\x86_emu\x86_emu.vcxproj">
+      <Project>{f01a0d79-1e73-41ec-9021-4351bac8fcb8}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

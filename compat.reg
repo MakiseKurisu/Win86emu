@@ -1,0 +1,10 @@
+REGEDIT4
+
+[HKEY_CURRENT_USER\Software\x86node\Compatibility]
+"OSVersionLo"=dword:00000001
+"OSVersionHi"=dword:00000005
+"OSVersionBuild"=dword:00000a28
+"OSServicepackLo"=dword:00000000
+"OSServicepackHi"=dword:00000003
+"SimulateAdminRights"=dword:00000001
+

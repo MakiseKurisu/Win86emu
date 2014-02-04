@@ -1,0 +1,12 @@
+REGEDIT4
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Yact]
+"LogLevel"=dword:00000004
+"LogFile"=hex(2):25,74,65,6d,70,25,5c,79,61,63,74,2e,6c,6f,67,00
+"Engine"="U:\\DynamicTranslator\\Release\\dosbox_emu.dll"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Yact\Compatibility]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Yact\Compatibility\Heroes3.exe]
+"NoRaiseException"=dword:00000001
+
