@@ -1,0 +1,7 @@
+# Visual Studio files
+*.pdb
+*.lastcodeanalysissucceeded
+*.suo
+*.sdf
+*.ilk
+*.opensdf
