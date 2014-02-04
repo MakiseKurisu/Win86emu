@@ -112,7 +112,7 @@ protected:
 
 // Operations
   BOOL Create(LPCTSTR szTip, HICON hIcon, UINT Menu=0) { //Menu may be used by derived classes
-    VERIFY(OK=(GetVersion() & 0xFF)>=4); // this is only for Windows 95 (or higher)
+    VERIFY(OK=IsWindowsVersionOrGreater(4,0,0)); // this is only for Windows 95 (or higher)
     if(OK) {
       ASSERT(_tcslen(szTip)<=64); // Tray only supports tooltip text up to 64 characters
     // Create this invisible window for Message passing

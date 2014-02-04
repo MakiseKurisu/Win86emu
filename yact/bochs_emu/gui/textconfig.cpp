@@ -48,11 +48,11 @@ extern "C" {
 }
 #endif
 
-#include "osdep.h"
 #include "param_names.h"
 #include "textconfig.h"
 #include "siminterface.h"
 #include "extplugin.h"
+#include "osdep.h"
 
 #define CI_PATH_LENGTH 512
 
