@@ -5,3 +5,5 @@
 *.sdf
 *.ilk
 *.opensdf
+*.lpch
+*.vcxproj.user
