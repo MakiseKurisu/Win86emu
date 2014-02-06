@@ -7,7 +7,7 @@
 
 int MyFunc()
 {
-	return 0x12345678;
+    return 0x12345678;
 }
 
 extern "C" void __declspec(dllimport) Emulate(DWORD addr);
@@ -15,15 +15,15 @@ extern "C" void __declspec(dllimport) Emulate(DWORD addr);
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-//	Emulate((DWORD)MyFunc);
+    //	Emulate((DWORD)MyFunc);
 
-	CSet Set;
+    CSet Set;
 
-	Set.Set(1234,"lalala");
-	puts((char*)Set.Get(1234));
+    Set.Set(1234, "lalala");
+    puts((char*) Set.Get(1234));
 
 
-	getchar();
-	return 0;
+    getchar();
+    return 0;
 }
 

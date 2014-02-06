@@ -6,27 +6,27 @@
 #include <stdio.h>
 #include <Shlobj.h>
 
-HMODULE HM=0;
+HMODULE HM = 0;
 
 bool MakeLink(int csidl, int ResId)
 {
-	char Target[MAX_PATH];
-	size_t tmp;
-	BOOL Ret=SHGetSpecialFolderPathA(0,Target,csidl,FALSE);
-	if(Ret==0)
-		return false;
+    char Target[MAX_PATH];
+    size_t tmp;
+    BOOL Ret = SHGetSpecialFolderPathA(0, Target, csidl, FALSE);
+    if (Ret == 0)
+        return false;
 
-	char SymLink[MAX_PATH];
-	if(getenv_s(&tmp,SymLink,"ALLUSERSPROFILE"))
-		return false;
+    char SymLink[MAX_PATH];
+    if (getenv_s(&tmp, SymLink, "ALLUSERSPROFILE"))
+        return false;
 
-	strcat_s(SymLink,"\\");
-	if(LoadStringA(HM,ResId,SymLink+strlen(SymLink),MAX_PATH-strlen(SymLink))==0)
-		return false;
+    strcat_s(SymLink, "\\");
+    if (LoadStringA(HM, ResId, SymLink + strlen(SymLink), MAX_PATH - strlen(SymLink)) == 0)
+        return false;
 
-	printf("Linking directory '%s' to '%s' - ",SymLink,Target);
+    printf("Linking directory '%s' to '%s' - ", SymLink, Target);
 
-	return CreateSymbolicLinkA(SymLink,Target,SYMBOLIC_LINK_FLAG_DIRECTORY)!=0;
+    return CreateSymbolicLinkA(SymLink, Target, SYMBOLIC_LINK_FLAG_DIRECTORY) != 0;
 }
 
 #define IDS_ADMINTOOLS              67
@@ -38,34 +38,34 @@ bool MakeLink(int csidl, int ResId)
 #define IDS_COMMON_VIDEO            70
 #define IDS_STARTMENU               51
 
-int Ids[][2]={
-	{CSIDL_COMMON_APPDATA, IDS_APPDATA},
-	{CSIDL_COMMON_DESKTOPDIRECTORY, IDS_DESKTOP},
-	{CSIDL_COMMON_DOCUMENTS, IDS_COMMON_DOCUMENTS},
-	{CSIDL_COMMON_MUSIC, IDS_COMMON_MUSIC},
-	{CSIDL_COMMON_PICTURES, IDS_COMMON_PICTURES},
-	{CSIDL_COMMON_VIDEO, IDS_COMMON_VIDEO},
-	{CSIDL_COMMON_STARTMENU, IDS_STARTMENU}, 
-	0,0
+int Ids[][2] = {
+    { CSIDL_COMMON_APPDATA, IDS_APPDATA },
+    { CSIDL_COMMON_DESKTOPDIRECTORY, IDS_DESKTOP },
+    { CSIDL_COMMON_DOCUMENTS, IDS_COMMON_DOCUMENTS },
+    { CSIDL_COMMON_MUSIC, IDS_COMMON_MUSIC },
+    { CSIDL_COMMON_PICTURES, IDS_COMMON_PICTURES },
+    { CSIDL_COMMON_VIDEO, IDS_COMMON_VIDEO },
+    { CSIDL_COMMON_STARTMENU, IDS_STARTMENU },
+    0, 0
 };
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	HM=LoadLibraryExA("c:\\x86node\\Windows\\System32\\shell32.dll",0, LOAD_LIBRARY_AS_IMAGE_RESOURCE|LOAD_LIBRARY_AS_DATAFILE);
-	if(HM==0)
-	{
-		puts("Unable to load x86 shell32.dll");
-		return 1;
-	}
-	
-	for(int i=0; Ids[i][0]; i++)
-	{
-		if(MakeLink(Ids[i][0],Ids[i][1]))
-			puts("ok");
-		else
-			puts("failed");
-	}
-	
-	return 0;
+    HM = LoadLibraryExA("c:\\x86node\\Windows\\System32\\shell32.dll", 0, LOAD_LIBRARY_AS_IMAGE_RESOURCE | LOAD_LIBRARY_AS_DATAFILE);
+    if (HM == 0)
+    {
+        puts("Unable to load x86 shell32.dll");
+        return 1;
+    }
+
+    for (int i = 0; Ids[i][0]; i++)
+    {
+        if (MakeLink(Ids[i][0], Ids[i][1]))
+            puts("ok");
+        else
+            puts("failed");
+    }
+
+    return 0;
 }
 

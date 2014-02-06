@@ -1,4 +1,4 @@
-/* 
+/*
  * Yet Another Code Translator (c) mamaich, 2011
  *
  * x86 registry redirection function
@@ -18,7 +18,7 @@ extern "C" {
 #define UTIL_EXPORT
 #endif
 
-UTIL_EXPORT HKEY RegRedirect(HKEY Reg);
+    UTIL_EXPORT HKEY RegRedirect(HKEY Reg);
 
 #ifdef __cplusplus
 }

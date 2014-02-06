@@ -9,21 +9,21 @@
 // Initialize engine. Return true == success.
 EMU_EXPORT BOOL EmuInitialize(void)
 {
-	return TRUE;
+    return TRUE;
 }
 
 // Emulate code starting from Addr, passing NParams on stack (like stdcall/cdecl)
-EMU_EXPORT DWORD EmuExecute(DWORD Addr, int NParams,...)
+EMU_EXPORT DWORD EmuExecute(DWORD Addr, int NParams, ...)
 {
-	x86opcode *Op=new x86opcode;
-	Op->CurrentPtr=(BYTE*)Addr;
+    x86opcode *Op = new x86opcode;
+    Op->CurrentPtr = (BYTE*) Addr;
 
-	do
-		InitCommand(Op);
-	while(ProcessCommand(Op));
+    do
+    InitCommand(Op);
+    while (ProcessCommand(Op));
 
-	delete Op;
-	return 0;
+    delete Op;
+    return 0;
 }
 
 
