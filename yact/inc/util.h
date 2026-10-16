@@ -19,11 +19,19 @@ extern "C" {
     // Check if we are running under emulation
     UTIL_EXPORT bool IsEmulatorPresent(void);
 
-    // Print string to log
-    UTIL_EXPORT void LogPrint(const char *Fmt, ...);	// LogLevel>3
-    UTIL_EXPORT void LogInfo(const char *Fmt, ...);  // LogLevel>2
-    UTIL_EXPORT void LogWarn(const char *Fmt, ...);  // LogLevel>1
-    UTIL_EXPORT void LogErr(const char *Fmt, ...);   // LogLevel>0
+    // Print string to log. Levels match the registry LogLevel setting
+    // (HKCU/HKLM\Software\x86node\Settings, default 2): 1=ERROR 2=WARN
+    // 3=INFO 4=DEBUG 5=TRACE, 0 disables logging. Implemented in
+    // supp.nt.dll; see LOGGING.md.
+    UTIL_EXPORT void LogPrint(const char *Fmt, ...);	// LogLevel>3 (DEBUG)
+    UTIL_EXPORT void LogInfo(const char *Fmt, ...);  // LogLevel>2 (INFO)
+    UTIL_EXPORT void LogWarn(const char *Fmt, ...);  // LogLevel>1 (WARN)
+    UTIL_EXPORT void LogErr(const char *Fmt, ...);   // LogLevel>0 (ERROR)
+    UTIL_EXPORT void LogTrace(const char *Fmt, ...); // LogLevel>4 (TRACE, per-instruction detail)
+    // TRUE if the given level (1=ERROR..5=TRACE) is currently logged; use it
+    // to skip expensive message construction for TRACE.
+    UTIL_EXPORT bool LogIsEnabled(int Level);
+    // Effective log file path (may differ from the default; see LOGGING.md).
     UTIL_EXPORT const char *LogGetName();
 
     // Get int value from registry
