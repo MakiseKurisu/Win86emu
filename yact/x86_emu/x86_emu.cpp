@@ -122,7 +122,16 @@ EMU_EXPORT BOOL EmuInitialize(void)
     return Ok;
 }
 
-int __declspec(thread) FPU_cw = 0x37F;
+// MSVC 2013 (v120) has no C++11 thread_local, so the compiler-specific
+// keyword is used. clang/MinGW ignores __declspec(thread) on ARM and needs
+// __thread instead.
+#if defined(_MSC_VER)
+#define EMU_THREAD_LOCAL __declspec(thread)
+#else
+#define EMU_THREAD_LOCAL __thread
+#endif
+
+EMU_THREAD_LOCAL int FPU_cw = 0x37F;
 EMU_EXPORT int GetFPUCW()
 {
     return FPU_cw;
