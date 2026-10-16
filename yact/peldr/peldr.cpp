@@ -521,6 +521,11 @@ static LPVOID PeLdrInternalLoadModule(PE_HANDLE Pe, LPVOID DesiredAddress)
     DWORD Tmp;
     Pe->AllocatedMem = FALSE;
     DWORD ModuleSize = PeLdrCalcModuleRamSize(Pe);
+    // Declared up front: the goto Error paths below must not jump over initializations (non-MSVC compilers reject that)
+    char *Base;
+    IMAGE_DOS_HEADER *Dos;
+    IMAGE_NT_HEADERS *NT;
+    IMAGE_SECTION_HEADER *Sec;
 
     if (ModuleSize && DesiredAddress) // as we can't rebase - try to "get" memory where needed (possibly overwriting something)
     {
@@ -563,17 +568,17 @@ static LPVOID PeLdrInternalLoadModule(PE_HANDLE Pe, LPVOID DesiredAddress)
     Pe->Base = DesiredAddress;
     Pe->Size = ModuleSize;
     memset(DesiredAddress, 0, ModuleSize);
-    char *Base = (char*) DesiredAddress;
+    Base = (char*) DesiredAddress;
 
     LogWarn("%08X-%08X : %S\n", Pe->Base, (DWORD) Pe->Base + ModuleSize, Pe->FileName);
 
-    IMAGE_DOS_HEADER *Dos = (IMAGE_DOS_HEADER*) Base;
+    Dos = (IMAGE_DOS_HEADER*) Base;
     SetFilePointer(Pe->hFile, 0, 0, SEEK_SET);
     //	if(!ReadFile(Pe->hFile,Dos,sizeof(IMAGE_DOS_HEADER),&Tmp,0))
     if (!ReadFile(Pe->hFile, Dos, PeLdrGetPageSize(), &Tmp, 0))	// Heroes 3 WOG stores its data just after PE before 1 section
         goto Error;
 
-    IMAGE_NT_HEADERS *NT = (IMAGE_NT_HEADERS*) (Base + Dos->e_lfanew);
+    NT = (IMAGE_NT_HEADERS*) (Base + Dos->e_lfanew);
     SetFilePointer(Pe->hFile, Dos->e_lfanew, 0, SEEK_SET);
     if (!ReadFile(Pe->hFile, NT, sizeof(IMAGE_NT_HEADERS), &Tmp, 0))
         goto Error;
@@ -584,7 +589,7 @@ static LPVOID PeLdrInternalLoadModule(PE_HANDLE Pe, LPVOID DesiredAddress)
         goto Error;
     }
 
-    IMAGE_SECTION_HEADER *Sec = (IMAGE_SECTION_HEADER*) (sizeof(IMAGE_NT_HEADERS) +(char*) NT);
+    Sec = (IMAGE_SECTION_HEADER*) (sizeof(IMAGE_NT_HEADERS) +(char*) NT);
 
     if (!ReadFile(Pe->hFile, Sec, sizeof(IMAGE_SECTION_HEADER) *NT->FileHeader.NumberOfSections, &Tmp, 0))
         goto Error;
@@ -904,8 +909,8 @@ PE_EXPORT struct _TEB *PeLdrGetCurrentTeb(void)
         ((DWORD**) Teb)[0] = &((DWORD*) Teb)[TEB_SIZE / 4 - 2];
         memset(Ptr, 0, 4 * MAX_STATIC_TLS);
         TlsSetValue(TebTlsIndex, Teb);
-        CbCallAtThreadExit(FreeTEB, Teb);
-        CbCallAtThreadExit(FreeTEB, Ptr);
+        CbCallAtThreadExit((void*)FreeTEB, Teb);
+        CbCallAtThreadExit((void*)FreeTEB, Ptr);
     }
     return Teb;
 }

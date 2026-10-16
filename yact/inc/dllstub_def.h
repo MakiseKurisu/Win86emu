@@ -24,17 +24,47 @@ struct ModuleDef
     const char *Func;
 };
 
+/*
+ * The stub call sequence consumed by the emulator (IO port 0xE5):
+ *
+ *     mov eax, p          ; p points to the argument block
+ *     jmp f1              ; skip the 5-byte mov below
+ *     mov eax, offset str_##name
+ * f1: in eax, 0xe5        ; trap: the emulator reads the imm32 at (eip-4)
+ *     mov p, eax          ; store the return value
+ *
+ * The "mov eax, offset str_##name" (B8 imm32) instruction must sit directly in
+ * front of the "in eax, 0xe5" trap; the emulator locates the ModuleDef record
+ * through it. MSVC resolves the "jmp f1" target through C labels, other
+ * compilers do not, so the non-MSVC build emits the identical byte pattern
+ * with GNU inline assembly and a numeric local label.
+ */
+#if defined(_MSC_VER)
+#define STUB_ASM_BODY(name) \
+    __asm { mov eax,p }	\
+    __asm { jmp f1 }	\
+    __asm { mov eax,offset str_##name }	\
+f1:	__asm { in eax,0xe5 }	\
+    __asm { mov p,eax }
+#else
+#define STUB_ASM_BODY(name) \
+    __asm__ __volatile__( \
+        "movl %0, %%eax\n\t" \
+        "jmp 1f\n\t" \
+        "movl $%c1, %%eax\n\t" \
+        "1:\n\t" \
+        "inl $0xe5, %%eax\n\t" \
+        "movl %%eax, %0" \
+        : "+m"(p) : "i"(&str_##name) : "eax")
+#endif
+
 // functions with "..." does not prepend underscore to names
 #define DEFINE_FUNC_(name) 	\
     static const ModuleDef str_##name={DLL_NAME,#name};	\
     EXTERN_C DW STUB_EXPORT _stub_##name(DW p1,...)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -50,11 +80,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(void)		\
 {	\
     DW *p=0;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -70,11 +96,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -90,11 +112,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -110,11 +128,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2,DW p3)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -130,11 +144,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2,DW p3,DW p4)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -150,11 +160,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2,DW p3,DW p4,DW p5)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -170,11 +176,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2,DW p3,DW p4,DW p5,DW p6)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -190,11 +192,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2,DW p3,DW p4,DW p5,DW p6,DW p7)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -210,11 +208,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2,DW p3,DW p4,DW p5,DW p6,DW p7,DW p8)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -230,11 +224,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2,DW p3,DW p4,DW p5,DW p6,DW p7,DW p8,DW p9)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -250,11 +240,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2,DW p3,DW p4,DW p5,DW p6,DW p7,DW p8,DW p9,DW p10)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -270,11 +256,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2,DW p3,DW p4,DW p5,DW p6,DW p7,DW p8,DW p9,DW p10,DW p11)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -290,11 +272,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2,DW p3,DW p4,DW p5,DW p6,DW p7,DW p8,DW p9,DW p10,DW p11,DW p12)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -310,11 +288,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2,DW p3,DW p4,DW p5,DW p6,DW p7,DW p8,DW p9,DW p10,DW p11,DW p12,DW p13)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -330,11 +304,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2,DW p3,DW p4,DW p5,DW p6,DW p7,DW p8,DW p9,DW p10,DW p11,DW p12,DW p13,DW p14)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -350,11 +320,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2,DW p3,DW p4,DW p5,DW p6,DW p7,DW p8,DW p9,DW p10,DW p11,DW p12,DW p13,DW p14,DW p15)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -370,11 +336,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2,DW p3,DW p4,DW p5,DW p6,DW p7,DW p8,DW p9,DW p10,DW p11,DW p12,DW p13,DW p14,DW p15,DW p16)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -390,11 +352,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2,DW p3,DW p4,DW p5,DW p6,DW p7,DW p8,DW p9,DW p10,DW p11,DW p12,DW p13,DW p14,DW p15,DW p16,DW p17)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
@@ -410,11 +368,7 @@ f1:	__asm { in eax,0xe5 }	\
     EXTERN_C DW STUB_EXPORT stub_##name(DW p1,DW p2,DW p3,DW p4,DW p5,DW p6,DW p7,DW p8,DW p9,DW p10,DW p11,DW p12,DW p13,DW p14,DW p15,DW p16,DW p17,DW p18)		\
 {	\
     DW *p=&p1;	\
-    __asm { mov eax,p }	\
-    __asm { jmp f1 }	\
-    __asm { mov eax,offset str_##name }	\
-f1:	__asm { in eax,0xe5 }	\
-    __asm { mov p,eax }	\
+    STUB_ASM_BODY(name);	\
     return (DW)p;	\
 }
 
