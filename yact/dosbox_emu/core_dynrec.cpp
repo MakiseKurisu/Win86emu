@@ -195,6 +195,7 @@ D1F8                 bne         yact_InterlockedIncrement+6h (69A91366h)
 F3BF 8F5B            dmb         ish  
 4770				 BX			  lr
 */
+#if defined(_MSC_VER)
 	__emit(0xF3BF); 
 	__emit(0x8F5B);
 	__emit(0x0002);
@@ -208,6 +209,24 @@ F3BF 8F5B            dmb         ish
 	__emit(0xF3BF);
 	__emit(0x8F5B);
 	__emit(0x4770);
+#else
+	// clang: __emit() is MSVC-only and non-asm statements are not allowed in
+	// naked functions; emit the same Thumb-2 halfwords as raw data.
+	__asm(
+		".short 0xF3BF\n"
+		".short 0x8F5B\n"
+		".short 0x0002\n"
+		".short 0xE8D2\n"
+		".short 0x0F4F\n"
+		".short 0x3001\n"
+		".short 0xE8C2\n"
+		".short 0x0F43\n"
+		".short 0x2B00\n"
+		".short 0xD1F8\n"
+		".short 0xF3BF\n"
+		".short 0x8F5B\n"
+		".short 0x4770\n");
+#endif
 }
 
 extern "C" __declspec(naked) void volatile _InterlockedDecrement8(Bit8u *ptr)	
@@ -223,6 +242,7 @@ D1F8                 bne         yact_InterlockedIncrement+6h (69A91366h)
 F3BF 8F5B            dmb         ish  
 4770				 BX			  lr
 */
+#if defined(_MSC_VER)
 	__emit(0xF3BF); 
 	__emit(0x8F5B);
 	__emit(0x0002);
@@ -236,14 +256,39 @@ F3BF 8F5B            dmb         ish
 	__emit(0xF3BF);
 	__emit(0x8F5B);
 	__emit(0x4770);
+#else
+	// clang: see _InterlockedIncrement8 above
+	__asm(
+		".short 0xF3BF\n"
+		".short 0x8F5B\n"
+		".short 0x0002\n"
+		".short 0xE8D2\n"
+		".short 0x0F4F\n"
+		".short 0x3801\n"
+		".short 0xE8C2\n"
+		".short 0x0F43\n"
+		".short 0x2B00\n"
+		".short 0xD1F8\n"
+		".short 0xF3BF\n"
+		".short 0x8F5B\n"
+		".short 0x4770\n");
+#endif
 }
 
 extern "C" __declspec(naked) void volatile PLI(void* Ptr)
 {
 //	10 F9 00 FC		PLI.W           [R0]
+#if defined(_MSC_VER)
 	__emit(0xF910);
 	__emit(0xfc00);
 	__emit(0x4770);
+#else
+	// clang: see _InterlockedIncrement8 above
+	__asm(
+		".short 0xF910\n"
+		".short 0xfc00\n"
+		".short 0x4770\n");
+#endif
 }
 #else
 extern "C" __declspec(naked) void volatile _InterlockedIncrement8(Bit8u *_ptr)	
@@ -317,7 +362,7 @@ Bits CPU_Core_Dynrec_Run(void) {
 		// page doesn't contain code or is special
 		if (GCC_UNLIKELY(!chandler)) return DOSBOX_ALTERNATE_CORE();
 
-		PLI(core_dynrec.runcode);
+		PLI((void*)core_dynrec.runcode);
 
 		// find correct Dynamic Block to run
 		CacheBlockDynRec * block=chandler->FindCacheBlock(ip_point&DYN_PAGE_HASH_MASK);

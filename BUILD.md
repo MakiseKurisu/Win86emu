@@ -56,6 +56,7 @@ archive for macOS). See "Windows RT Runtime Requirements" below.
 cd <repository root>
 make -f Makefile.x86 clean
 make -f Makefile.x86 -j4          # use -j$(nproc) on Linux
+make -f Makefile.x86 -j4 stubs    # the 74 *.86.dll stubs (+ supp.86.dll)
 ```
 
 Output DLLs will be in `release/` directory:
@@ -63,19 +64,28 @@ Output DLLs will be in `release/` directory:
 - `x86_emu.dll` - emulator front end (x86)
 - `yact_emu.dll` - experimental emulation core (x86); not used at runtime
 - `cbacks.nt.dll` - callback layer (x86; links against `supp.nt.dll` and `x86_emu.dll`)
+- `supp.86.dll` - x86 build of the support DLL used inside the emulated process
+- `*.86.dll` - the 74 system-DLL stubs (`aclui.86.dll` ... `wtsapi32.86.dll`)
 
-Note: the make build produces the four DLLs above. The engine DLLs that `x86_emu.dll` loads at
-runtime (`dosbox_emu.dll` + `dosbox_emu1..15.dll`, `bochs_emu.dll`) and the remaining runtime
-files (`peldr.nt.dll`, `cpihook.dll`, `Launcher.exe` and the `*.86.dll` stub DLLs) are built
-from the Visual Studio solution (`yact.sln`), which is also what `Setup/Setup.isl` packages.
-The Makefiles contain an optional `stubs` target, but it does not build with the MinGW
-toolchains: the `*.86.dll` stubs are x86 DLLs written with MSVC inline assembly
-(`yact/inc/dllstub_def.h`). A runtime directory assembled from the make output alone cannot
-start an emulated application.
+The `stubs` target builds the `*.86.dll` stubs with clang/MinGW. The stubs are linked with
+`-nostartfiles` against `yact/stub_dlls/stub_crt.cpp`, a minimal CRT shim
+(`DllMainCRTStartup`, `memcpy`/`memset`, a small `sprintf`, `operator new`/`delete`). The shim
+is required because the stubs are loaded by the PE loader inside the emulated process, which
+fails the whole module load when one import DLL cannot be resolved; with the shim all 74 stubs
+import no `api-ms-win-crt-*` DLLs at all (verified with `llvm-readobj --coff-imports`).
+`yact/inc/dllstub_def.h` carries both the original MSVC inline-assembly bodies and a
+GNU-assembler variant (selected by `STUB_ASM_BODY`, numeric local labels, `.short` instead of
+`__emit`) so the same headers compile with clang.
+
+The engine DLLs that `x86_emu.dll` loads at runtime (`dosbox_emu.dll` + `dosbox_emu1..15.dll`,
+`bochs_emu.dll`) are not part of the x86 make build; they are ARM32 binaries produced by
+`Makefile.arm` (see below), and `Launcher.exe` still comes from `yact.sln` (MFC).
 
 The solution contains a single `dosbox_emu` project. The release configuration of `x86_emu.dll`
-loads 16 engine files, so create `dosbox_emu1.dll` ... `dosbox_emu15.dll` as copies of the built
-`dosbox_emu.dll` before packaging; each copy is loaded as its own module and provides one emulation
+loads 16 engine files, so `dosbox_emu1.dll` ... `dosbox_emu15.dll` must be byte-identical copies
+of the built `dosbox_emu.dll` (`make -f Makefile.arm dosbox-slots` creates them; there is no
+separate project, DEF file or vcxproj for the numbered files - see `LoadEmulatorDll()` in
+`yact/x86_emu/x86_emu.cpp`); each copy is loaded as its own module and provides one emulation
 instance. The debug configuration loads only `dosbox_emu.dll`.
 
 ### Build ARM32 Version
@@ -83,7 +93,10 @@ instance. The debug configuration loads only `dosbox_emu.dll`.
 ```bash
 cd <repository root>
 make -f Makefile.arm clean
-make -f Makefile.arm -j4          # use -j$(nproc) on Linux
+make -f Makefile.arm -j4          # use -j$(nproc) on Linux  (core four)
+make -f Makefile.arm -j4 native   # + peldr.nt, cpihook.nt, dosbox_emu, bochs_emu
+                                  #   and the 72 *.nt.dll system DLLs
+make -f Makefile.arm dosbox-slots # dosbox_emu1.dll ... dosbox_emu15.dll (copies)
 ```
 
 Output DLLs will be in `release/` directory:
@@ -91,9 +104,25 @@ Output DLLs will be in `release/` directory:
 - `x86_emu.dll` - emulator front end (ARM32)
 - `yact_emu.dll` - experimental emulation core (ARM32); not used at runtime
 - `cbacks.nt.dll` - callback layer (ARM32; links against `supp.nt.dll` and `x86_emu.dll`)
+- `peldr.nt.dll` - PE loader (26 exports, `PeLdr*`)
+- `cpihook.nt.dll` - control-panel hook (`CpiMakeHook`)
+- `dosbox_emu.dll`, `bochs_emu.dll` - emulation engines (`EmuInitialize`, `EmuExecute`)
+- `*.nt.dll` - the 72 system-DLL replacements (`kernel32.nt.dll` ... `wtsapi32.nt.dll`)
+- `dosbox_emu1.dll` ... `dosbox_emu15.dll` - engine slot copies (`dosbox-slots` target)
 
-The same note as for the x86 build applies: the DOSBox/Bochs engines, the `*.86.dll` stubs and
-the remaining runtime files come from `yact.sln`, not from this Makefile.
+The yact target compiles the 72 `system_dlls` projects from their vcxproj source lists. Three
+projects need import libraries that LLVM-MinGW does not ship complete:
+
+- `ntdll_yact` links the project's own MSVC ARM import library `ntdll_arm.lib`
+  (`RtlConvertUiListToApiList` is missing from MinGW's `libntdll.a`).
+- `wininet_yact` / `winspool_yact` get extra import libraries generated with
+  `armv7-w64-mingw32-dlltool` from the checked-in `wininet_extra.def` / `winspool_extra.def`
+  (undocumented exports that are in the MSVC Windows SDK import libraries only).
+- `ddraw_yact` links the project's MSVC ARM import library `ddraw_arm.lib`
+  (undocumented exports such as `DDGetAttachedSurfaceLcl`, `DSoundHelp`, `GetDDSurfaceLocal`).
+
+`-DUNICODE`/`-D_UNICODE` is applied per project (all `system_dlls`, `peldr` and `cpihook` have
+`CharacterSet=Unicode`; `dosbox_emu` and `bochs_emu` are MultiByte).
 
 Note: both Makefiles write to `release/` and use the same object file names, so build the two
 architectures in separate working copies (or run `make clean` in between) if both outputs are
@@ -125,12 +154,26 @@ llvm-readobj --file-headers --coff-exports --coff-imports release/supp.nt.dll
 objdump -p release/x86_emu.dll        # works with the system objdump on macOS
 ```
 
-Checks that were verified for the ARM32 build:
+Checks that were verified for the ARM32 build (clean build in an isolated copy,
+`make -f Makefile.arm native` + `dosbox-slots`, both exit 0, 95 DLLs):
+- Every DLL is `IMAGE_FILE_MACHINE_ARMNT` (0x1C4).
 - `supp.nt.dll` exports the logger API (`LogErr`, `LogWarn`, `LogInfo`, `LogPrint`, `LogTrace`,
   `LogIsEnabled`, `LogGetName`, `InitDebugLog`, `ShutdownDebugLog`, ...).
 - `x86_emu.dll` imports the logger functions from `supp.nt.dll`; `cbacks.nt.dll` imports from
   both `supp.nt.dll` and `x86_emu.dll`.
-- All DLLs additionally import `KERNEL32.dll` and the UCRT API sets (`api-ms-win-crt-*`).
+- Export counts: `kernel32.nt.dll` 1079, `user32.nt.dll` 631, `ntdll.nt.dll` 843,
+  `peldr.nt.dll` 26, `cpihook.nt.dll` 1, `dosbox_emu.dll` / `bochs_emu.dll` 2 each
+  (`EmuInitialize`, `EmuExecute`).
+- All ARM DLLs additionally import `KERNEL32.dll` and the UCRT API sets (`api-ms-win-crt-*`).
+- The 15 `dosbox_emu1..15.dll` files are byte-identical to `dosbox_emu.dll` (`cmp`).
+
+Checks that were verified for the x86 build (clean build in an isolated copy,
+`make -f Makefile.x86` + `make -f Makefile.x86 stubs`, both exit 0, 79 DLLs):
+- Every DLL is `IMAGE_FILE_MACHINE_I386` (0x14C).
+- None of the 74 stub DLLs imports `api-ms-win-crt-*` (the CRT shim removed all UCRT
+  dependencies); `supp.86.dll` and the core DLLs do import the UCRT API sets.
+- Export counts: `ntdll.86.dll` 1091, `kernel32.86.dll` 1082, `user32.86.dll` 632,
+  `gdi32.86.dll` 347 (stdcall-decorated names, e.g. `stub_CreateFileW@28`).
 
 ## Makefile Variants
 
@@ -164,11 +207,22 @@ Checks that were verified for the ARM32 build:
 
 ## MSVC (`yact.sln`) Build Requirements
 
-The make build covers `supp.nt.dll`, `x86_emu.dll`, `yact_emu.dll` and `cbacks.nt.dll`. The
-remaining runtime components (`dosbox_emu.dll` + `dosbox_emu1..15.dll`, `bochs_emu.dll`,
-`peldr.nt.dll`, `cpihook.dll`, `Launcher.exe`, the `*.86.dll` stubs) are built only from
-`yact.sln`, which requires a Windows host:
+Since the Phase 8 work almost the whole solution builds on macOS with LLVM-MinGW (see the
+"macOS Build Coverage" section below). A Windows host with Visual Studio is still required
+only for:
 
+- `Launcher.exe` - MFC application (`CWinApp`, `CDialogEx`, message maps, `afxwin.h`).
+  MFC/ATL ship only with Visual Studio; building it on macOS would require rewriting the UI
+  to plain Win32.
+- `test_seh.exe` - uses a naked function with MSVC inline assembly (`__asm` blocks that
+  reference named parameters); clang rejects this construct. A rewrite to GNU inline
+  assembly is possible but was not attempted.
+- The Win32 (x86) configuration of `peldr` - clang's i686 SEH code generation fails on
+  `peldr.cpp` (`__try`/`__except` produces undefined `L__ehtable$...` assembler labels).
+  The ARM32 configuration - the one used at runtime - builds cleanly. Only the x86
+  desktop test tools (`imphook.dll`, `yactemu_test.exe`) would need an x86 peldr.
+
+The full MSVC path needs:
 - Visual Studio 2013 Update 5 (platform toolset `v120`, used by all projects)
 - Windows SDK 8.0/8.1 with the ARM build tools (the solution contains ARM32 configurations)
 - This path was not executed while preparing this guide (no Windows host was available on the

@@ -578,7 +578,14 @@ typedef
 // that the C compiler allows.  It tests the following keywords to
 // see if any is permitted: inline, __inline__, __inline.  If none
 // is permitted, it defines inline to be empty.
+#if defined(_MSC_VER)
 #define inline __forceinline
+#else
+// clang/mingw: redefining "inline" as a macro breaks the libc++ headers
+// ("inline namespace" becomes "__forceinline namespace"); the plain
+// keyword is the correct choice for this compiler.
+#define inline inline
+#endif
 
 // inline functions in headers that are compiled with C compiler
 // (e.g. fpu code) are declared with BX_C_INLINE macro.  Note that

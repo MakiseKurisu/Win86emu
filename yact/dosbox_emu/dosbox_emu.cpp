@@ -259,7 +259,7 @@ EMU_EXPORT DWORD EmuExecute(DWORD Addr, int NParams,...)
 	void *Stack=StackList.GetHead();
 	if(Stack==0)
 		Stack=AllocStack(EMU_STACK_SIZE);
-	CbCallAtThreadExit(ReuseStack,Stack);
+	CbCallAtThreadExit((void*)ReuseStack,Stack);
 
 	my_reg_esp = EMU_STACK_SIZE-128+(DWORD)Stack;
 	*(DWORD*)my_reg_esp=CbReturnToHost();
@@ -284,7 +284,7 @@ EMU_EXPORT DWORD EmuExecute(DWORD Addr, int NParams,...)
 			break;
     } while (!ret);
 
-	CbRemoveCallAtThreadExit(ReuseStack,Stack);
+	CbRemoveCallAtThreadExit((void*)ReuseStack,Stack);
 	ReuseStack(Stack);
 
 	return my_reg_eax;

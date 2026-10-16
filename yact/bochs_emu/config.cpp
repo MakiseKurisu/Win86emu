@@ -3443,7 +3443,7 @@ int bx_write_atadevice_options(FILE *fp, Bit8u channel, Bit8u drive, bx_list_c *
 
     fprintf(fp, ", biosdetect=%s", SIM->get_param_enum("biosdetect", base)->get_selected());
 
-    if (SIM->get_param_string("model", base)->getptr()>0) {
+    if (SIM->get_param_string("model", base)->getptr()!=0) {
         fprintf(fp, ", model=\"%s\"", SIM->get_param_string("model", base)->getptr());
     }
 

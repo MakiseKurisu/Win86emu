@@ -42,7 +42,7 @@ DIAPI stub_DirectInput8Create(
 	if(din)
 	{
 		org_DI_CreateDevice=(t_DI_CreateDevice*)din->lpVtbl->CreateDevice;
-		*(void**)&din->lpVtbl->CreateDevice=DI_CreateDevice;
+		*(void**)&din->lpVtbl->CreateDevice=(void*)DI_CreateDevice;
 	}
 	return hr;
 }
@@ -110,7 +110,7 @@ DIAPI stub_DllGetClassObject(const CLSID& clsid, const IID& iid, void **ppv)
 		if(din)
 		{
 			org_DI_CreateDevice=(t_DI_CreateDevice*)din->lpVtbl->CreateDevice;
-			*(void**)&din->lpVtbl->CreateDevice=DI_CreateDevice;
+			*(void**)&din->lpVtbl->CreateDevice=(void*)DI_CreateDevice;
 		}
 	}
 	return gco(clsid, iid, ppv);

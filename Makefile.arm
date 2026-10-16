@@ -1,5 +1,15 @@
 # Win86emun Cross-Compilation Makefile for LLVM-MinGW
 # Target: Windows ARM32 (armv7)
+#
+# Targets:
+#   all     - the four core native DLLs (supp.nt, yact_emu, x86_emu, cbacks.nt)
+#   native  - the four core native DLLs plus peldr.nt, cpihook.nt, dosbox_emu,
+#             bochs_emu and the 72 yact system DLLs (targets: all + yact)
+#   yact    - the 72 native system_dlls replacement DLLs (*.nt.dll)
+#   dosbox-slots - the dosbox_emu1..15.dll engine copies (release config)
+#   clean   - remove build artifacts
+#
+# The x86 *.86.dll stub DLLs are NOT built here; see Makefile.x86 (target: stubs).
 
 CROSS_PREFIX = armv7-w64-mingw32
 CXX = $(CROSS_PREFIX)-g++
@@ -25,7 +35,6 @@ YACT_EMU_DIR = yact/yact_emu
 X86_EMU_DIR = yact/x86_emu
 SUPP_DIR = yact/supp
 CBACKS_DIR = yact/cbacks
-STUB_DLLS_DIR = yact/stub_dlls
 RELEASE_DIR = release
 OBJ_DIR = obj
 
@@ -74,9 +83,6 @@ CBACKS_SRCS = $(CBACKS_DIR)/callbacks.cpp \
 CBACKS_OBJS = $(CBACKS_DIR)/callbacks.o \
               $(CBACKS_DIR)/dllmain.o
 
-# Stub DLLs (optional, can be built with make stubs)
-STUB_DLLS = kernel32.86.dll user32.86.dll gdi32.86.dll advapi32.86.dll
-
 # Default target
 all: $(RELEASE_DIR)/supp.nt.dll $(RELEASE_DIR)/yact_emu.dll $(RELEASE_DIR)/x86_emu.dll $(RELEASE_DIR)/cbacks.nt.dll
 
@@ -112,20 +118,343 @@ $(X86_EMU_DIR)/%.o: $(X86_EMU_DIR)/%.cpp
 $(CBACKS_DIR)/%.o: $(CBACKS_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) $(DEFINES) -DCBACKS_EXPORTS $(INCLUDES) -c $< -o $@
 
-# Build stub DLLs (optional target)
-stubs: $(patsubst %,$(RELEASE_DIR)/%,$(STUB_DLLS))
+# ===========================================================================
+# Phase 8: native ARM32 DLLs beyond the core four - targets: native, yact
+#
+# The sources are the MSVC project sources, compiled with clang
+# -fms-extensions (MSVC syntax: __try/__except, __declspec(thread), __int64,
+# __fastcall, ...) and -DUNICODE/-D_UNICODE (all projects have
+# CharacterSet=Unicode, so MSBuild defines them for the MSVC build).
+#
+# Notes:
+#  - llvm-mingw is UCRT-only: every DLL below imports api-ms-win-crt-* (on
+#    Windows RT 8.x this requires KB2999226, same as the core four).
+#  - -DUNICODE/-D_UNICODE is added per project (all yact system_dlls, peldr
+#    and cpihook have CharacterSet=Unicode, so MSBuild defines them for the
+#    MSVC build; dosbox_emu and bochs_emu are MultiByte and do not get them).
+#  - wininet_yact/winspool_yact reference undocumented exports that are in the
+#    MSVC Windows SDK import libraries but missing from llvm-mingw's; extra
+#    import libraries are generated from the checked-in .def files (dlltool).
+#  - ntdll_yact uses the project's own MSVC ARM import library (ntdll_arm.lib)
+#    because llvm-mingw's libntdll.a lacks RtlConvertUiListToApiList.
+# ===========================================================================
+NATIVE_CXXFLAGS = -std=c++17 -O2 -fms-extensions -Wno-dynamic-exception-spec -Wno-register -Wno-reserved-user-defined-literal -march=armv7-a -mthumb -mno-unaligned-access -D_M_ARM -DWIN32 -D_WINDOWS -D_USRDLL -DNDEBUG
+NATIVE_LDFLAGS = -shared -static-libgcc -static-libstdc++
+# Union of the AdditionalDependencies of the 72 yact projects (each link gets
+# the whole union; unused import libraries are harmless). ntdll is deliberately
+# absent: MinGW's libntdll.a lacks RtlConvertUiListToApiList, so the ntdll_yact
+# link uses the project's own MSVC ARM import library instead (extra lib below).
+NATIVE_LIBS = -laclui -ladvapi32 -lcfgmgr32 -lcomctl32 -lcomdlg32 -lcrypt32 -ld3d9 -ldbghelp -ldhcpcsvc -ldnsapi -ldsound -ldxguid -lfaultrep -lgdi32 -lgdiplus -lhid -licmui -limagehlp -limm32 -liphlpapi -lkernel32 -lksuser -llz32 -lmapi32 -lmgmtapi -lmpr -lmprapi -lmsacm32 -lmscms -lmsdmo -lmsimg32 -lmswsock -lnddeapi -lnetapi32 -lnewdev -lodbc32 -lodbccp32 -lole32 -loleacc -loleaut32 -loledlg -lpowrprof -lpsapi -lrasapi32 -lrasdlg -lrpcns4 -lrpcrt4 -lrtutils -lsecur32 -lsetupapi -lshell32 -lshfolder -lshlwapi -lsnmpapi -ltapi32 -luser32 -luserenv -lusp10 -luuid -luxtheme -lversion -lwininet -lwinmm -lwinspool -lws2_32 -lwsnmp32 -lwsock32 -lwtsapi32
+NATIVE_REFS = $(RELEASE_DIR)/supp.nt.dll $(RELEASE_DIR)/cbacks.nt.dll $(RELEASE_DIR)/x86_emu.dll $(RELEASE_DIR)/peldr.nt.dll
+YACT_DLLS_DIR = yact/system_dlls
 
-# Generic stub DLL build rule
-$(RELEASE_DIR)/%.86.dll: $(STUB_DLLS_DIR)/%_stub/*.cpp
-	$(CXX) $(LDFLAGS) -D$*_STUB_EXPORTS $(DEFINES) $(INCLUDES) -o $@ $^ -lkernel32
+# Extra import libraries missing from llvm-mingw (generated from the .def files)
+$(OBJ_DIR)/libwininet_extra.a: $(YACT_DLLS_DIR)/wininet_yact/wininet_extra.def
+	$(CROSS_PREFIX)-dlltool -m arm -D wininet.dll -d $< -l $@
+
+$(OBJ_DIR)/libwinspool_extra.a: $(YACT_DLLS_DIR)/winspool_yact/winspool_extra.def
+	$(CROSS_PREFIX)-dlltool -m arm -D winspool.drv -d $< -l $@
+
+# ---- peldr.nt.dll ---------------------------------------------------------
+# PE loader; exports are declared with PE_EXPORT (defined on the command line
+# like the MSVC build); the min/max macros come from the project settings.
+PELDR_DIR = yact/peldr
+PELDR_OBJS = $(PELDR_DIR)/dllmain.o \
+             $(PELDR_DIR)/peldr.o \
+             $(PELDR_DIR)/program.o \
+             $(PELDR_DIR)/stdafx.o
+PELDR_CXXFLAGS = $(NATIVE_CXXFLAGS) -DUNICODE -D_UNICODE -D__in= -D__out= -D'min(a,b)=((a)<(b)?(a):(b))' -D'max(a,b)=((a)>(b)?(a):(b))' -DPE_EXPORT='__declspec(dllexport)'
+
+$(PELDR_DIR)/%.o: $(PELDR_DIR)/%.cpp
+	$(CXX) $(PELDR_CXXFLAGS) -I$(PELDR_DIR) $(INCLUDES) -c $< -o $@
+
+$(RELEASE_DIR)/peldr.nt.dll: $(PELDR_OBJS) $(RELEASE_DIR)/supp.nt.dll $(RELEASE_DIR)/cbacks.nt.dll $(RELEASE_DIR)/x86_emu.dll
+	$(CXX) $(NATIVE_LDFLAGS) -o $@ $(PELDR_OBJS) $(RELEASE_DIR)/supp.nt.dll $(RELEASE_DIR)/cbacks.nt.dll $(RELEASE_DIR)/x86_emu.dll -lkernel32 -limagehlp -lntdll -ldbghelp
+
+# ---- cpihook.nt.dll -------------------------------------------------------
+CPIHOOK_DIR = yact/cpihook
+CPIHOOK_OBJS = $(CPIHOOK_DIR)/cpihook.o \
+               $(CPIHOOK_DIR)/dllmain.o \
+               $(CPIHOOK_DIR)/stdafx.o
+
+$(CPIHOOK_DIR)/%.o: $(CPIHOOK_DIR)/%.cpp
+	$(CXX) $(NATIVE_CXXFLAGS) -DUNICODE -D_UNICODE -DCPIHOOK_EXPORTS -I$(CPIHOOK_DIR) $(INCLUDES) -c $< -o $@
+
+$(RELEASE_DIR)/cpihook.nt.dll: $(CPIHOOK_OBJS)
+	$(CXX) $(NATIVE_LDFLAGS) -o $@ $(CPIHOOK_OBJS) -lkernel32 -luser32 -ladvapi32 -lshell32 -lole32
+
+# ---- dosbox_emu.dll -------------------------------------------------------
+DOSBOX_DIR = yact/dosbox_emu
+DOSBOX_OBJS = $(DOSBOX_DIR)/callback.o \
+              $(DOSBOX_DIR)/core_dyn_x86.o \
+              $(DOSBOX_DIR)/core_dynrec.o \
+              $(DOSBOX_DIR)/core_full.o \
+              $(DOSBOX_DIR)/core_normal.o \
+              $(DOSBOX_DIR)/core_prefetch.o \
+              $(DOSBOX_DIR)/core_simple.o \
+              $(DOSBOX_DIR)/cpu.o \
+              $(DOSBOX_DIR)/cross.o \
+              $(DOSBOX_DIR)/dllmain.o \
+              $(DOSBOX_DIR)/dosbox_emu.o \
+              $(DOSBOX_DIR)/flags.o \
+              $(DOSBOX_DIR)/fpu.o \
+              $(DOSBOX_DIR)/memory.o \
+              $(DOSBOX_DIR)/messages.o \
+              $(DOSBOX_DIR)/mmx.o \
+              $(DOSBOX_DIR)/modrm.o \
+              $(DOSBOX_DIR)/paging.o \
+              $(DOSBOX_DIR)/setup.o \
+              $(DOSBOX_DIR)/stdafx.o \
+              $(DOSBOX_DIR)/support.o
+
+$(DOSBOX_DIR)/%.o: $(DOSBOX_DIR)/%.cpp
+	$(CXX) $(NATIVE_CXXFLAGS) -DDOSBOX_EMU_EXPORTS -I$(DOSBOX_DIR) -I$(DOSBOX_DIR)/include $(INCLUDES) -c $< -o $@
+
+$(RELEASE_DIR)/dosbox_emu.dll: $(DOSBOX_OBJS) $(NATIVE_REFS)
+	$(CXX) $(NATIVE_LDFLAGS) -o $@ $(DOSBOX_OBJS) $(NATIVE_REFS) -lkernel32 -luser32 -lshell32
+
+# ---- bochs_emu.dll --------------------------------------------------------
+# (the original project defines DOSBOX_EMU_EXPORTS for bochs too)
+BOCHS_DIR = yact/bochs_emu
+BOCHS_OBJS = $(BOCHS_DIR)/bochs_test.o \
+             $(BOCHS_DIR)/config.o \
+             $(BOCHS_DIR)/cpu/3dnow.o \
+             $(BOCHS_DIR)/cpu/access.o \
+             $(BOCHS_DIR)/cpu/access32.o \
+             $(BOCHS_DIR)/cpu/access64.o \
+             $(BOCHS_DIR)/cpu/aes.o \
+             $(BOCHS_DIR)/cpu/apic.o \
+             $(BOCHS_DIR)/cpu/arith16.o \
+             $(BOCHS_DIR)/cpu/arith32.o \
+             $(BOCHS_DIR)/cpu/arith64.o \
+             $(BOCHS_DIR)/cpu/arith8.o \
+             $(BOCHS_DIR)/cpu/bcd.o \
+             $(BOCHS_DIR)/cpu/bit.o \
+             $(BOCHS_DIR)/cpu/bit16.o \
+             $(BOCHS_DIR)/cpu/bit32.o \
+             $(BOCHS_DIR)/cpu/bit64.o \
+             $(BOCHS_DIR)/cpu/call_far.o \
+             $(BOCHS_DIR)/cpu/cpu.o \
+             $(BOCHS_DIR)/cpu/cpuid.o \
+             $(BOCHS_DIR)/cpu/crc32.o \
+             $(BOCHS_DIR)/cpu/crregs.o \
+             $(BOCHS_DIR)/cpu/ctrl_xfer16.o \
+             $(BOCHS_DIR)/cpu/ctrl_xfer32.o \
+             $(BOCHS_DIR)/cpu/ctrl_xfer64.o \
+             $(BOCHS_DIR)/cpu/ctrl_xfer_pro.o \
+             $(BOCHS_DIR)/cpu/data_xfer16.o \
+             $(BOCHS_DIR)/cpu/data_xfer32.o \
+             $(BOCHS_DIR)/cpu/data_xfer64.o \
+             $(BOCHS_DIR)/cpu/data_xfer8.o \
+             $(BOCHS_DIR)/cpu/debugstuff.o \
+             $(BOCHS_DIR)/cpu/exception.o \
+             $(BOCHS_DIR)/cpu/fetchdecode.o \
+             $(BOCHS_DIR)/cpu/fetchdecode64.o \
+             $(BOCHS_DIR)/cpu/flag_ctrl.o \
+             $(BOCHS_DIR)/cpu/flag_ctrl_pro.o \
+             $(BOCHS_DIR)/cpu/fpu_emu.o \
+             $(BOCHS_DIR)/cpu/icache.o \
+             $(BOCHS_DIR)/cpu/init.o \
+             $(BOCHS_DIR)/cpu/io.o \
+             $(BOCHS_DIR)/cpu/iret.o \
+             $(BOCHS_DIR)/cpu/jmp_far.o \
+             $(BOCHS_DIR)/cpu/lazy_flags.o \
+             $(BOCHS_DIR)/cpu/load.o \
+             $(BOCHS_DIR)/cpu/logical16.o \
+             $(BOCHS_DIR)/cpu/logical32.o \
+             $(BOCHS_DIR)/cpu/logical64.o \
+             $(BOCHS_DIR)/cpu/logical8.o \
+             $(BOCHS_DIR)/cpu/mmx.o \
+             $(BOCHS_DIR)/cpu/msr.o \
+             $(BOCHS_DIR)/cpu/mult16.o \
+             $(BOCHS_DIR)/cpu/mult32.o \
+             $(BOCHS_DIR)/cpu/mult64.o \
+             $(BOCHS_DIR)/cpu/mult8.o \
+             $(BOCHS_DIR)/cpu/paging.o \
+             $(BOCHS_DIR)/cpu/proc_ctrl.o \
+             $(BOCHS_DIR)/cpu/protect_ctrl.o \
+             $(BOCHS_DIR)/cpu/resolver.o \
+             $(BOCHS_DIR)/cpu/ret_far.o \
+             $(BOCHS_DIR)/cpu/segment_ctrl.o \
+             $(BOCHS_DIR)/cpu/segment_ctrl_pro.o \
+             $(BOCHS_DIR)/cpu/shift16.o \
+             $(BOCHS_DIR)/cpu/shift32.o \
+             $(BOCHS_DIR)/cpu/shift64.o \
+             $(BOCHS_DIR)/cpu/shift8.o \
+             $(BOCHS_DIR)/cpu/smm.o \
+             $(BOCHS_DIR)/cpu/soft_int.o \
+             $(BOCHS_DIR)/cpu/sse.o \
+             $(BOCHS_DIR)/cpu/sse_move.o \
+             $(BOCHS_DIR)/cpu/sse_pfp.o \
+             $(BOCHS_DIR)/cpu/sse_rcp.o \
+             $(BOCHS_DIR)/cpu/sse_string.o \
+             $(BOCHS_DIR)/cpu/stack16.o \
+             $(BOCHS_DIR)/cpu/stack32.o \
+             $(BOCHS_DIR)/cpu/stack64.o \
+             $(BOCHS_DIR)/cpu/string.o \
+             $(BOCHS_DIR)/cpu/tasking.o \
+             $(BOCHS_DIR)/cpu/vm8086.o \
+             $(BOCHS_DIR)/cpu/vmcs.o \
+             $(BOCHS_DIR)/cpu/vmexit.o \
+             $(BOCHS_DIR)/cpu/vmx.o \
+             $(BOCHS_DIR)/cpu/xsave.o \
+             $(BOCHS_DIR)/disasm/dis_decode.o \
+             $(BOCHS_DIR)/disasm/dis_groups.o \
+             $(BOCHS_DIR)/disasm/resolve.o \
+             $(BOCHS_DIR)/disasm/syntax.o \
+             $(BOCHS_DIR)/dllmain.o \
+             $(BOCHS_DIR)/fpu/f2xm1.o \
+             $(BOCHS_DIR)/fpu/ferr.o \
+             $(BOCHS_DIR)/fpu/fpatan.o \
+             $(BOCHS_DIR)/fpu/fprem.o \
+             $(BOCHS_DIR)/fpu/fpu.o \
+             $(BOCHS_DIR)/fpu/fpu_arith.o \
+             $(BOCHS_DIR)/fpu/fpu_compare.o \
+             $(BOCHS_DIR)/fpu/fpu_const.o \
+             $(BOCHS_DIR)/fpu/fpu_load_store.o \
+             $(BOCHS_DIR)/fpu/fpu_misc.o \
+             $(BOCHS_DIR)/fpu/fpu_tags.o \
+             $(BOCHS_DIR)/fpu/fpu_trans.o \
+             $(BOCHS_DIR)/fpu/fsincos.o \
+             $(BOCHS_DIR)/fpu/fyl2x.o \
+             $(BOCHS_DIR)/fpu/poly.o \
+             $(BOCHS_DIR)/fpu/softfloat-round-pack.o \
+             $(BOCHS_DIR)/fpu/softfloat-specialize.o \
+             $(BOCHS_DIR)/fpu/softfloat.o \
+             $(BOCHS_DIR)/fpu/softfloatx80.o \
+             $(BOCHS_DIR)/gui/paramtree.o \
+             $(BOCHS_DIR)/gui/siminterface.o \
+             $(BOCHS_DIR)/gui/textconfig.o \
+             $(BOCHS_DIR)/interlock.o \
+             $(BOCHS_DIR)/logio.o \
+             $(BOCHS_DIR)/pc_system.o \
+             $(BOCHS_DIR)/stdafx.o
+
+$(BOCHS_DIR)/%.o: $(BOCHS_DIR)/%.cpp
+	$(CXX) $(NATIVE_CXXFLAGS) -DDOSBOX_EMU_EXPORTS -I$(BOCHS_DIR) $(INCLUDES) -c $< -o $@
+
+$(RELEASE_DIR)/bochs_emu.dll: $(BOCHS_OBJS) $(NATIVE_REFS)
+	$(CXX) $(NATIVE_LDFLAGS) -o $@ $(BOCHS_OBJS) $(NATIVE_REFS) -lkernel32 -luser32 -ladvapi32
+
+# ---- yact system DLLs (*.nt.dll, 72 projects) -----------------------------
+YACT_EXTRA_LIBS_ntdll = $(YACT_DLLS_DIR)/ntdll_yact/ntdll_arm.lib
+YACT_EXTRA_LIBS_ddraw = $(YACT_DLLS_DIR)/ddraw_yact/ddraw_arm.lib
+YACT_EXTRA_LIBS_wininet = $(OBJ_DIR)/libwininet_extra.a
+YACT_EXTRA_LIBS_winspool = $(OBJ_DIR)/libwinspool_extra.a
+
+ACLUI_NT_OBJS = $(YACT_DLLS_DIR)/aclui_yact/dllmain.o $(YACT_DLLS_DIR)/aclui_yact/stdafx.o $(YACT_DLLS_DIR)/aclui_yact/aclui.o
+ADVAPI32_NT_OBJS = $(YACT_DLLS_DIR)/advapi32_yact/advapi32.o $(YACT_DLLS_DIR)/advapi32_yact/advapi32_impl.o $(YACT_DLLS_DIR)/advapi32_yact/dllmain.o $(YACT_DLLS_DIR)/advapi32_yact/stdafx.o
+CFGMGR32_NT_OBJS = $(YACT_DLLS_DIR)/cfgmgr32_yact/dllmain.o $(YACT_DLLS_DIR)/cfgmgr32_yact/stdafx.o $(YACT_DLLS_DIR)/cfgmgr32_yact/cfgmgr32.o
+COMCTL32_NT_OBJS = $(YACT_DLLS_DIR)/comctl32_yact/comctl32.o $(YACT_DLLS_DIR)/comctl32_yact/comctl32_impl.o
+COMDLG32_NT_OBJS = $(YACT_DLLS_DIR)/comdlg32_yact/comdlg32.o $(YACT_DLLS_DIR)/comdlg32_yact/comdlg32_impl.o $(YACT_DLLS_DIR)/comdlg32_yact/dllmain.o $(YACT_DLLS_DIR)/comdlg32_yact/stdafx.o
+CRYPT32_NT_OBJS = $(YACT_DLLS_DIR)/crypt32_yact/dllmain.o $(YACT_DLLS_DIR)/crypt32_yact/stdafx.o $(YACT_DLLS_DIR)/crypt32_yact/crypt32.o
+D3D9_NT_OBJS = $(YACT_DLLS_DIR)/d3d9_yact/dllmain.o $(YACT_DLLS_DIR)/d3d9_yact/stdafx.o $(YACT_DLLS_DIR)/d3d9_yact/d3d9.o
+DBGHELP_NT_OBJS = $(YACT_DLLS_DIR)/dbghelp_yact/dbghelp.o $(YACT_DLLS_DIR)/dbghelp_yact/dllmain.o $(YACT_DLLS_DIR)/dbghelp_yact/stdafx.o
+DDRAW_NT_OBJS = $(YACT_DLLS_DIR)/ddraw_yact/ddraw.o $(YACT_DLLS_DIR)/ddraw_yact/ddraw_common.o $(YACT_DLLS_DIR)/ddraw_yact/ddraw_impl.o $(YACT_DLLS_DIR)/ddraw_yact/dllmain.o $(YACT_DLLS_DIR)/ddraw_yact/stdafx.o
+DHCPCSVC_NT_OBJS = $(YACT_DLLS_DIR)/dhcpcsvc_yact/dllmain.o $(YACT_DLLS_DIR)/dhcpcsvc_yact/stdafx.o $(YACT_DLLS_DIR)/dhcpcsvc_yact/dhcpcsvc.o
+DNSAPI_NT_OBJS = $(YACT_DLLS_DIR)/dnsapi_yact/dllmain.o $(YACT_DLLS_DIR)/dnsapi_yact/stdafx.o $(YACT_DLLS_DIR)/dnsapi_yact/dnsapi.o
+DSOUND_NT_OBJS = $(YACT_DLLS_DIR)/dsound_yact/dllmain.o $(YACT_DLLS_DIR)/dsound_yact/dsound.o $(YACT_DLLS_DIR)/dsound_yact/dsound_impl.o $(YACT_DLLS_DIR)/dsound_yact/stdafx.o
+FAULTREP_NT_OBJS = $(YACT_DLLS_DIR)/faultrep_yact/dllmain.o $(YACT_DLLS_DIR)/faultrep_yact/stdafx.o $(YACT_DLLS_DIR)/faultrep_yact/faultrep.o
+GDI32_NT_OBJS = $(YACT_DLLS_DIR)/gdi32_yact/dllmain.o $(YACT_DLLS_DIR)/gdi32_yact/gdi32.o $(YACT_DLLS_DIR)/gdi32_yact/stdafx.o
+GDIPLUS_NT_OBJS = $(YACT_DLLS_DIR)/gdiplus_yact/dllmain.o $(YACT_DLLS_DIR)/gdiplus_yact/stdafx.o $(YACT_DLLS_DIR)/gdiplus_yact/gdiplus.o
+HID_NT_OBJS = $(YACT_DLLS_DIR)/hid_yact/dllmain.o $(YACT_DLLS_DIR)/hid_yact/hid.o $(YACT_DLLS_DIR)/hid_yact/stdafx.o
+ICMUI_NT_OBJS = $(YACT_DLLS_DIR)/icmui_yact/dllmain.o $(YACT_DLLS_DIR)/icmui_yact/stdafx.o $(YACT_DLLS_DIR)/icmui_yact/icmui.o
+IMAGEHLP_NT_OBJS = $(YACT_DLLS_DIR)/imagehlp_yact/dllmain.o $(YACT_DLLS_DIR)/imagehlp_yact/stdafx.o $(YACT_DLLS_DIR)/imagehlp_yact/imagehlp.o
+IMM32_NT_OBJS = $(YACT_DLLS_DIR)/imm32_yact/dllmain.o $(YACT_DLLS_DIR)/imm32_yact/stdafx.o $(YACT_DLLS_DIR)/imm32_yact/imm32.o
+IPHLPAPI_NT_OBJS = $(YACT_DLLS_DIR)/iphlpapi_yact/dllmain.o $(YACT_DLLS_DIR)/iphlpapi_yact/stdafx.o $(YACT_DLLS_DIR)/iphlpapi_yact/iphlpapi.o
+KERNEL32_NT_OBJS = $(YACT_DLLS_DIR)/kernel32_yact/dllmain.o $(YACT_DLLS_DIR)/kernel32_yact/kernel32_impl.o $(YACT_DLLS_DIR)/kernel32_yact/kernel32.o $(YACT_DLLS_DIR)/kernel32_yact/stdafx.o
+KSUSER_NT_OBJS = $(YACT_DLLS_DIR)/ksuser_yact/dllmain.o $(YACT_DLLS_DIR)/ksuser_yact/stdafx.o $(YACT_DLLS_DIR)/ksuser_yact/ksuser.o
+LZ32_NT_OBJS = $(YACT_DLLS_DIR)/lz32_yact/dllmain.o $(YACT_DLLS_DIR)/lz32_yact/stdafx.o $(YACT_DLLS_DIR)/lz32_yact/lz32.o
+MAPI32_NT_OBJS = $(YACT_DLLS_DIR)/mapi32_yact/dllmain.o $(YACT_DLLS_DIR)/mapi32_yact/stdafx.o $(YACT_DLLS_DIR)/mapi32_yact/mapi32.o
+MGMTAPI_NT_OBJS = $(YACT_DLLS_DIR)/mgmtapi_yact/dllmain.o $(YACT_DLLS_DIR)/mgmtapi_yact/stdafx.o $(YACT_DLLS_DIR)/mgmtapi_yact/mgmtapi.o
+MPR_NT_OBJS = $(YACT_DLLS_DIR)/mpr_yact/dllmain.o $(YACT_DLLS_DIR)/mpr_yact/mpr.o $(YACT_DLLS_DIR)/mpr_yact/stdafx.o
+MPRAPI_NT_OBJS = $(YACT_DLLS_DIR)/mprapi_yact/dllmain.o $(YACT_DLLS_DIR)/mprapi_yact/stdafx.o $(YACT_DLLS_DIR)/mprapi_yact/mprapi.o
+MSACM32_NT_OBJS = $(YACT_DLLS_DIR)/msacm32_yact/dllmain.o $(YACT_DLLS_DIR)/msacm32_yact/stdafx.o $(YACT_DLLS_DIR)/msacm32_yact/msacm32.o
+MSCMS_NT_OBJS = $(YACT_DLLS_DIR)/mscms_yact/dllmain.o $(YACT_DLLS_DIR)/mscms_yact/stdafx.o $(YACT_DLLS_DIR)/mscms_yact/mscms.o
+MSDMO_NT_OBJS = $(YACT_DLLS_DIR)/msdmo_yact/dllmain.o $(YACT_DLLS_DIR)/msdmo_yact/stdafx.o $(YACT_DLLS_DIR)/msdmo_yact/msdmo.o
+MSIMG32_NT_OBJS = $(YACT_DLLS_DIR)/msimg32_yact/dllmain.o $(YACT_DLLS_DIR)/msimg32_yact/stdafx.o $(YACT_DLLS_DIR)/msimg32_yact/msimg32.o
+MSWSOCK_NT_OBJS = $(YACT_DLLS_DIR)/mswsock_yact/dllmain.o $(YACT_DLLS_DIR)/mswsock_yact/stdafx.o $(YACT_DLLS_DIR)/mswsock_yact/mswsock.o
+NDDEAPI_NT_OBJS = $(YACT_DLLS_DIR)/nddeapi_yact/dllmain.o $(YACT_DLLS_DIR)/nddeapi_yact/stdafx.o $(YACT_DLLS_DIR)/nddeapi_yact/nddeapi.o
+NETAPI32_NT_OBJS = $(YACT_DLLS_DIR)/netapi32_yact/dllmain.o $(YACT_DLLS_DIR)/netapi32_yact/netapi32.o $(YACT_DLLS_DIR)/netapi32_yact/stdafx.o
+NEWDEV_NT_OBJS = $(YACT_DLLS_DIR)/newdev_yact/dllmain.o $(YACT_DLLS_DIR)/newdev_yact/stdafx.o $(YACT_DLLS_DIR)/newdev_yact/newdev.o
+NTDLL_NT_OBJS = $(YACT_DLLS_DIR)/ntdll_yact/dllmain.o $(YACT_DLLS_DIR)/ntdll_yact/ntdll.o $(YACT_DLLS_DIR)/ntdll_yact/stdafx.o
+ODBC32_NT_OBJS = $(YACT_DLLS_DIR)/odbc32_yact/dllmain.o $(YACT_DLLS_DIR)/odbc32_yact/stdafx.o $(YACT_DLLS_DIR)/odbc32_yact/odbc32.o
+ODBCCP32_NT_OBJS = $(YACT_DLLS_DIR)/odbccp32_yact/dllmain.o $(YACT_DLLS_DIR)/odbccp32_yact/stdafx.o $(YACT_DLLS_DIR)/odbccp32_yact/odbccp32.o
+OLE32_NT_OBJS = $(YACT_DLLS_DIR)/ole32_yact/dllmain.o $(YACT_DLLS_DIR)/ole32_yact/ole32.o $(YACT_DLLS_DIR)/ole32_yact/ole32_impl.o $(YACT_DLLS_DIR)/ole32_yact/stdafx.o
+OLEACC_NT_OBJS = $(YACT_DLLS_DIR)/oleacc_yact/dllmain.o $(YACT_DLLS_DIR)/oleacc_yact/stdafx.o $(YACT_DLLS_DIR)/oleacc_yact/oleacc.o
+OLEAUT32_NT_OBJS = $(YACT_DLLS_DIR)/oleaut32_yact/dllmain.o $(YACT_DLLS_DIR)/oleaut32_yact/oleaut32.o $(YACT_DLLS_DIR)/oleaut32_yact/stdafx.o
+OLEDLG_NT_OBJS = $(YACT_DLLS_DIR)/oledlg_yact/dllmain.o $(YACT_DLLS_DIR)/oledlg_yact/stdafx.o $(YACT_DLLS_DIR)/oledlg_yact/oledlg.o
+POWRPROF_NT_OBJS = $(YACT_DLLS_DIR)/powrprof_yact/dllmain.o $(YACT_DLLS_DIR)/powrprof_yact/stdafx.o $(YACT_DLLS_DIR)/powrprof_yact/powrprof.o
+PSAPI_NT_OBJS = $(YACT_DLLS_DIR)/psapi_yact/dllmain.o $(YACT_DLLS_DIR)/psapi_yact/stdafx.o $(YACT_DLLS_DIR)/psapi_yact/psapi.o
+RASAPI32_NT_OBJS = $(YACT_DLLS_DIR)/rasapi32_yact/dllmain.o $(YACT_DLLS_DIR)/rasapi32_yact/stdafx.o $(YACT_DLLS_DIR)/rasapi32_yact/rasapi32.o
+RASDLG_NT_OBJS = $(YACT_DLLS_DIR)/rasdlg_yact/dllmain.o $(YACT_DLLS_DIR)/rasdlg_yact/stdafx.o $(YACT_DLLS_DIR)/rasdlg_yact/rasdlg.o
+RICHED20_NT_OBJS = $(YACT_DLLS_DIR)/riched20_yact/dllmain.o $(YACT_DLLS_DIR)/riched20_yact/riched20.o
+RICHED32_NT_OBJS = $(YACT_DLLS_DIR)/riched32_yact/dllmain.o $(YACT_DLLS_DIR)/riched32_yact/riched32.o
+RPCNS4_NT_OBJS = $(YACT_DLLS_DIR)/rpcns4_yact/dllmain.o $(YACT_DLLS_DIR)/rpcns4_yact/stdafx.o $(YACT_DLLS_DIR)/rpcns4_yact/rpcns4.o
+RPCRT4_NT_OBJS = $(YACT_DLLS_DIR)/rpcrt4_yact/dllmain.o $(YACT_DLLS_DIR)/rpcrt4_yact/stdafx.o $(YACT_DLLS_DIR)/rpcrt4_yact/rpcrt4.o
+RTUTILS_NT_OBJS = $(YACT_DLLS_DIR)/rtutils_yact/dllmain.o $(YACT_DLLS_DIR)/rtutils_yact/stdafx.o $(YACT_DLLS_DIR)/rtutils_yact/rtutils.o
+SECUR32_NT_OBJS = $(YACT_DLLS_DIR)/secur32_yact/dllmain.o $(YACT_DLLS_DIR)/secur32_yact/stdafx.o $(YACT_DLLS_DIR)/secur32_yact/secur32.o
+SETUPAPI_NT_OBJS = $(YACT_DLLS_DIR)/setupapi_yact/dllmain.o $(YACT_DLLS_DIR)/setupapi_yact/stdafx.o $(YACT_DLLS_DIR)/setupapi_yact/setupapi.o
+SHELL32_NT_OBJS = $(YACT_DLLS_DIR)/shell32_yact/dllmain.o $(YACT_DLLS_DIR)/shell32_yact/shell32.o $(YACT_DLLS_DIR)/shell32_yact/shell32_impl.o $(YACT_DLLS_DIR)/shell32_yact/stdafx.o
+SHFOLDER_NT_OBJS = $(YACT_DLLS_DIR)/shfolder_yact/dllmain.o $(YACT_DLLS_DIR)/shfolder_yact/stdafx.o $(YACT_DLLS_DIR)/shfolder_yact/shfolder.o
+SHLWAPI_NT_OBJS = $(YACT_DLLS_DIR)/shlwapi_yact/dllmain.o $(YACT_DLLS_DIR)/shlwapi_yact/shlwapi.o $(YACT_DLLS_DIR)/shlwapi_yact/shlwapi_impl.o $(YACT_DLLS_DIR)/shlwapi_yact/stdafx.o
+SNMPAPI_NT_OBJS = $(YACT_DLLS_DIR)/snmpapi_yact/dllmain.o $(YACT_DLLS_DIR)/snmpapi_yact/stdafx.o $(YACT_DLLS_DIR)/snmpapi_yact/snmpapi.o
+TAPI32_NT_OBJS = $(YACT_DLLS_DIR)/tapi32_yact/dllmain.o $(YACT_DLLS_DIR)/tapi32_yact/stdafx.o $(YACT_DLLS_DIR)/tapi32_yact/tapi32.o
+URL_NT_OBJS = $(YACT_DLLS_DIR)/url_yact/dllmain.o $(YACT_DLLS_DIR)/url_yact/stdafx.o $(YACT_DLLS_DIR)/url_yact/url.o
+USER32_NT_OBJS = $(YACT_DLLS_DIR)/user32_yact/dllmain.o $(YACT_DLLS_DIR)/user32_yact/stdafx.o $(YACT_DLLS_DIR)/user32_yact/user32.o $(YACT_DLLS_DIR)/user32_yact/user32_impl.o
+USERENV_NT_OBJS = $(YACT_DLLS_DIR)/userenv_yact/dllmain.o $(YACT_DLLS_DIR)/userenv_yact/stdafx.o $(YACT_DLLS_DIR)/userenv_yact/userenv.o
+USP10_NT_OBJS = $(YACT_DLLS_DIR)/usp10_yact/dllmain.o $(YACT_DLLS_DIR)/usp10_yact/stdafx.o $(YACT_DLLS_DIR)/usp10_yact/usp10.o
+UXTHEME_NT_OBJS = $(YACT_DLLS_DIR)/uxtheme_yact/dllmain.o $(YACT_DLLS_DIR)/uxtheme_yact/stdafx.o $(YACT_DLLS_DIR)/uxtheme_yact/uxtheme.o
+VERSION_NT_OBJS = $(YACT_DLLS_DIR)/version_yact/dllmain.o $(YACT_DLLS_DIR)/version_yact/stdafx.o $(YACT_DLLS_DIR)/version_yact/version.o
+WIN32SPL_NT_OBJS = $(YACT_DLLS_DIR)/win32spl_yact/dllmain.o $(YACT_DLLS_DIR)/win32spl_yact/stdafx.o $(YACT_DLLS_DIR)/win32spl_yact/win32spl.o
+WININET_NT_OBJS = $(YACT_DLLS_DIR)/wininet_yact/dllmain.o $(YACT_DLLS_DIR)/wininet_yact/stdafx.o $(YACT_DLLS_DIR)/wininet_yact/wininet.o $(YACT_DLLS_DIR)/wininet_yact/wininet_impl.o
+WINMM_NT_OBJS = $(YACT_DLLS_DIR)/winmm_yact/dllmain.o $(YACT_DLLS_DIR)/winmm_yact/stdafx.o $(YACT_DLLS_DIR)/winmm_yact/winmm.o $(YACT_DLLS_DIR)/winmm_yact/winmm_impl.o
+WINSPOOL_NT_OBJS = $(YACT_DLLS_DIR)/winspool_yact/dllmain.o $(YACT_DLLS_DIR)/winspool_yact/stdafx.o $(YACT_DLLS_DIR)/winspool_yact/winspool.o
+WS2_32_NT_OBJS = $(YACT_DLLS_DIR)/ws2_32_yact/dllmain.o $(YACT_DLLS_DIR)/ws2_32_yact/stdafx.o $(YACT_DLLS_DIR)/ws2_32_yact/ws2_32.o
+WSNMP32_NT_OBJS = $(YACT_DLLS_DIR)/wsnmp32_yact/dllmain.o $(YACT_DLLS_DIR)/wsnmp32_yact/stdafx.o $(YACT_DLLS_DIR)/wsnmp32_yact/wsnmp32.o
+WSOCK32_NT_OBJS = $(YACT_DLLS_DIR)/wsock32_yact/dllmain.o $(YACT_DLLS_DIR)/wsock32_yact/stdafx.o $(YACT_DLLS_DIR)/wsock32_yact/wsock32.o
+WTSAPI32_NT_OBJS = $(YACT_DLLS_DIR)/wtsapi32_yact/dllmain.o $(YACT_DLLS_DIR)/wtsapi32_yact/stdafx.o $(YACT_DLLS_DIR)/wtsapi32_yact/wtsapi32.o
+YACT_NAMES = aclui advapi32 cfgmgr32 comctl32 comdlg32 crypt32 d3d9 dbghelp ddraw dhcpcsvc dnsapi dsound faultrep gdi32 gdiplus hid icmui imagehlp imm32 iphlpapi kernel32 ksuser lz32 mapi32 mgmtapi mpr mprapi msacm32 mscms msdmo msimg32 mswsock nddeapi netapi32 newdev ntdll odbc32 odbccp32 ole32 oleacc oleaut32 oledlg powrprof psapi rasapi32 rasdlg riched20 riched32 rpcns4 rpcrt4 rtutils secur32 setupapi shell32 shfolder shlwapi snmpapi tapi32 url user32 userenv usp10 uxtheme version win32spl wininet winmm winspool ws2_32 wsnmp32 wsock32 wtsapi32
+
+define YACT_template
+$(YACT_DLLS_DIR)/$(1)_yact/%.o: $(YACT_DLLS_DIR)/$(1)_yact/%.cpp
+	$$(CXX) $$(NATIVE_CXXFLAGS) -DUNICODE -D_UNICODE -D$(2)_YACT_EXPORTS -I$$(YACT_DLLS_DIR)/$(1)_yact $$(INCLUDES) -c $$< -o $$@
+
+$(RELEASE_DIR)/$(1).nt.dll: $$($(2)_NT_OBJS) $$(NATIVE_REFS) $$(YACT_EXTRA_LIBS_$(1))
+	$$(CXX) $$(NATIVE_LDFLAGS) -o $$@ $$($(2)_NT_OBJS) $$(NATIVE_REFS) $$(YACT_EXTRA_LIBS_$(1)) $$(NATIVE_LIBS)
+endef
+
+$(foreach s,$(YACT_NAMES),$(eval $(call YACT_template,$(s),$(shell echo $(s) | tr a-z A-Z))))
+
+yact: $(addprefix $(RELEASE_DIR)/,$(addsuffix .nt.dll,$(YACT_NAMES)))
+
+native: all $(RELEASE_DIR)/peldr.nt.dll $(RELEASE_DIR)/cpihook.nt.dll $(RELEASE_DIR)/dosbox_emu.dll $(RELEASE_DIR)/bochs_emu.dll yact
+
+# The release configuration of x86_emu.dll loads 16 engine files:
+# "dosbox_emu.dll" (i=0) plus "dosbox_emu1.dll" ... "dosbox_emu15.dll"
+# (yact/x86_emu/x86_emu.cpp, LoadEmulatorDll / NUM_DOSBOXES=16). There is no
+# separate vcxproj for the numbered files: each one is a byte-identical copy
+# of the built dosbox_emu.dll, loaded as its own module so that every module
+# gets its own emulation state. The debug configuration loads only
+# dosbox_emu.dll (NUM_DOSBOXES=1).
+DOSBOX_SLOTS = $(addprefix $(RELEASE_DIR)/dosbox_emu,$(addsuffix .dll,$(shell seq 1 15)))
+
+dosbox-slots: $(RELEASE_DIR)/dosbox_emu.dll $(DOSBOX_SLOTS)
+
+$(DOSBOX_SLOTS): $(RELEASE_DIR)/dosbox_emu.dll
+	cp $< $@
 
 # Clean build artifacts
 clean:
 	rm -f $(SUPP_DIR)/*.o $(YACT_EMU_DIR)/*.o $(X86_EMU_DIR)/*.o $(CBACKS_DIR)/*.o
 	rm -f $(RELEASE_DIR)/*.dll $(RELEASE_DIR)/*.exe
+	rm -f $(PELDR_DIR)/*.o $(CPIHOOK_DIR)/*.o $(DOSBOX_DIR)/*.o
+	rm -f $(BOCHS_DIR)/*.o $(BOCHS_DIR)/*/*.o
+	rm -f $(YACT_DLLS_DIR)/*_yact/*.o
+	rm -f $(OBJ_DIR)/libwininet_extra.a $(OBJ_DIR)/libwinspool_extra.a
 
 # Phony targets
-.PHONY: all clean stubs
+.PHONY: all clean native yact dosbox-slots
 
 # Debug: print variables
 print-vars:

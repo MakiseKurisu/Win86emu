@@ -219,22 +219,22 @@ HRESULT __stdcall DI_CreateDevice(IDirectInputW* _this, REFGUID guid,LPDIRECTINP
 	{
 		LogWarn("DirectInput::CreateDevice: hooked keyboard input");
 		org_DIK_SetCooperativeLevel=(t_SetCooperativeLevel*)did->lpVtbl->SetCooperativeLevel;
-		did->lpVtbl->SetCooperativeLevel=DIK_SetCooperativeLevel;
+		*(void**)&did->lpVtbl->SetCooperativeLevel=(void*)DIK_SetCooperativeLevel;
 
 		org_DIK_Acquire=(t_Acquire*)did->lpVtbl->Acquire;
-		did->lpVtbl->Acquire=DIK_Acquire;
+		*(void**)&did->lpVtbl->Acquire=(void*)DIK_Acquire;
 
 		org_DIK_Unacquire=(t_Unacquire*)did->lpVtbl->Unacquire;
-		did->lpVtbl->Unacquire=DIK_Unacquire;
+		*(void**)&did->lpVtbl->Unacquire=(void*)DIK_Unacquire;
 
 		org_DIK_GetDeviceState=(t_GetDeviceState*)did->lpVtbl->GetDeviceState;
-		did->lpVtbl->GetDeviceState=DIK_GetDeviceState;
+		*(void**)&did->lpVtbl->GetDeviceState=(void*)DIK_GetDeviceState;
 
 		org_DIK_GetDeviceData=(t_GetDeviceData*)did->lpVtbl->GetDeviceData;
-		did->lpVtbl->GetDeviceData=DIK_GetDeviceData;
+		*(void**)&did->lpVtbl->GetDeviceData=(void*)DIK_GetDeviceData;
 
 		org_DIK_SetEventNotification=(t_SetEventNotification*)did->lpVtbl->SetEventNotification;
-		did->lpVtbl->SetEventNotification=DIK_SetEventNotification;
+		*(void**)&did->lpVtbl->SetEventNotification=(void*)DIK_SetEventNotification;
 	}
 	return hr;
 }

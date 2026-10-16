@@ -212,13 +212,13 @@ unsigned int ProcessCallback(unsigned int reg_eax, unsigned int reg_eip)
 		*(DWORD*)(reg_eip-4)=Func;
 	}
 
+	int tmp=0;
 	if(0x80000000==Func)
 #ifndef _DEBUG
 			goto Skip;
 #else
 			exit(0);
 #endif
-	int tmp=0;
 	__try {
 		tmp=((func*)(0x7fffffff&Func))(Param);
 	} __except(EXCEPTION_EXECUTE_HANDLER)
@@ -653,12 +653,12 @@ EMU_EXPORT DWORD EmuExecute(DWORD Addr, int NParams,...)
 		//BX_CPU(0)->handleSseModeChange();
 		BX_CPU(0)->trace=0;
 	}
-	CbCallAtThreadExit(ReuseBX_CPU,BX_CPU(0));
+	CbCallAtThreadExit((void*)ReuseBX_CPU,BX_CPU(0));
 
 	void *Stack=StackList.GetHead();
 	if(Stack==0)
 		Stack=AllocStack(EMU_STACK_SIZE);
-	CbCallAtThreadExit(ReuseStack,Stack);
+	CbCallAtThreadExit((void*)ReuseStack,Stack);
 
 	DWORD my_reg_esp = BX_CPU(0)->gen_reg[BX_32BIT_REG_ESP].dword.erx = EMU_STACK_SIZE-128+(DWORD)Stack;
 	BX_CPU(0)->gen_reg[BX_32BIT_REG_EIP].dword.erx = (DWORD)Addr;
@@ -692,10 +692,10 @@ EMU_EXPORT DWORD EmuExecute(DWORD Addr, int NParams,...)
 
 	DWORD ret=BX_CPU(0)->gen_reg[BX_32BIT_REG_EAX].dword.erx;
 
-	CbRemoveCallAtThreadExit(ReuseStack,Stack);
+	CbRemoveCallAtThreadExit((void*)ReuseStack,Stack);
 	ReuseStack(Stack);
 
-	CbRemoveCallAtThreadExit(ReuseBX_CPU,BX_CPU(0));
+	CbRemoveCallAtThreadExit((void*)ReuseBX_CPU,BX_CPU(0));
 	ReuseBX_CPU(BX_CPU(0));
 
 	return ret;

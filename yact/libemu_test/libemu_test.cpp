@@ -19,7 +19,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
     CSet Set;
 
-    Set.Set(1234, "lalala");
+    Set.Set(1234, (void*)"lalala");
     puts((char*) Set.Get(1234));
 
 

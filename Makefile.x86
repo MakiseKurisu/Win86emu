@@ -53,8 +53,137 @@ $(X86_EMU_DIR)/%.o: $(X86_EMU_DIR)/%.cpp
 $(CBACKS_DIR)/%.o: $(CBACKS_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) $(DEFINES) -DCBACKS_EXPORTS $(INCLUDES) -c $< -o $@
 
+# ===========================================================================
+# x86 stub DLLs (yact.sln stub_dlls, 74 projects) - target: stubs
+#
+# The MSVC build of these DLLs uses the static CRT (MultiThreaded) and links
+# no CRT DLL, because the emulated x86 environment contains only the *.86
+# DLLs: an unresolved api-ms-win-crt-*.dll / msvcrt.dll import makes PeLdr
+# fail the whole module load.  LLVM-MinGW is UCRT-only, so this build links
+# the stubs with -nostartfiles plus stub_crt.cpp (see that file), which
+# supplies DllMainCRTStartup / memcpy / memset / sprintf / operator new-delete
+# without pulling in the UCRT.  Verified: all 74 DLLs link with imports from
+# KERNEL32/ADVAPI32/ole32/ddraw/supp.86 only (no api-ms-*).
+# ===========================================================================
+STUB_DLLS_DIR = yact/stub_dlls
+STUB_CRT_OBJ = $(STUB_DLLS_DIR)/stub_crt.o
+STUB_CXXFLAGS = -std=c++17 -O2 -fasm-blocks -D__in= -D__out= -DWIN32 -D_WINDOWS -D_USRDLL -DNDEBUG -DUNICODE -D_UNICODE
+STUB_LDFLAGS = -shared -nostartfiles -static-libgcc -static-libstdc++
+STUB_LIBS = -lkernel32 -luser32 -lgdi32 -lwinspool -lcomdlg32 -ladvapi32 -lshell32 -lole32 -loleaut32 -luuid -lodbc32 -lodbccp32 -lddraw -ldxguid -lversion -lws2_32 -lcomctl32
+
+$(STUB_CRT_OBJ): $(STUB_DLLS_DIR)/stub_crt.cpp
+	$(CXX) -std=c++17 -O2 -fno-builtin -fno-exceptions -fno-rtti -c $< -o $@
+
+# supp.86.dll: the x86 build of supp, loaded by the stub DLLs in the emulated
+# environment (the stubs import supp.86.dll).
+$(RELEASE_DIR)/supp.86.dll: $(SUPP_OBJS)
+	$(CXX) $(LDFLAGS) -o $@ $^ -lkernel32 -luser32 -ladvapi32
+
+ACLUI_STUB_OBJS = yact/stub_dlls/aclui_stub/dllmain.o yact/stub_dlls/aclui_stub/stdafx.o yact/stub_dlls/aclui_stub/aclui.o
+ADVAPI32_STUB_OBJS = yact/stub_dlls/advapi32_stub/advapi32.o yact/stub_dlls/advapi32_stub/dllmain.o yact/stub_dlls/advapi32_stub/stdafx.o
+CFGMGR32_STUB_OBJS = yact/stub_dlls/cfgmgr32_stub/dllmain.o yact/stub_dlls/cfgmgr32_stub/stdafx.o yact/stub_dlls/cfgmgr32_stub/cfgmgr32.o
+COMCTL32_STUB_OBJS = yact/stub_dlls/comctl32_stub/comctl32.o
+COMDLG32_STUB_OBJS = yact/stub_dlls/comdlg32_stub/comdlg32.o yact/stub_dlls/comdlg32_stub/dllmain.o yact/stub_dlls/comdlg32_stub/stdafx.o
+CRYPT32_STUB_OBJS = yact/stub_dlls/crypt32_stub/dllmain.o yact/stub_dlls/crypt32_stub/stdafx.o yact/stub_dlls/crypt32_stub/crypt32.o
+D3D9_STUB_OBJS = yact/stub_dlls/d3d9_stub/dllmain.o yact/stub_dlls/d3d9_stub/stdafx.o yact/stub_dlls/d3d9_stub/d3d9.o
+DBGHELP_STUB_OBJS = yact/stub_dlls/dbghelp_stub/dbghelp.o yact/stub_dlls/dbghelp_stub/dllmain.o yact/stub_dlls/dbghelp_stub/stdafx.o
+DDRAW_STUB_OBJS = yact/stub_dlls/ddraw_stub/ddraw.o yact/stub_dlls/ddraw_stub/ddraw_impl86.o yact/stub_dlls/ddraw_stub/dllmain.o yact/stub_dlls/ddraw_stub/stdafx.o
+DHCPCSVC_STUB_OBJS = yact/stub_dlls/dhcpcsvc_stub/dllmain.o yact/stub_dlls/dhcpcsvc_stub/stdafx.o yact/stub_dlls/dhcpcsvc_stub/dhcpcsvc.o
+DINPUT8_STUB_OBJS = yact/stub_dlls/dinput8_stub/dinput_common.o yact/stub_dlls/dinput8_stub/dinput8_86.o yact/stub_dlls/dinput8_stub/dllmain.o yact/stub_dlls/dinput8_stub/stdafx.o
+DINPUT_STUB_OBJS = yact/stub_dlls/dinput_stub/dinput.o yact/stub_dlls/dinput_stub/dllmain.o yact/stub_dlls/dinput_stub/stdafx.o
+DNSAPI_STUB_OBJS = yact/stub_dlls/dnsapi_stub/dllmain.o yact/stub_dlls/dnsapi_stub/stdafx.o yact/stub_dlls/dnsapi_stub/dnsapi.o
+DSOUND_STUB_OBJS = yact/stub_dlls/dsound_stub/dllmain.o yact/stub_dlls/dsound_stub/dsound.o yact/stub_dlls/dsound_stub/stdafx.o
+FAULTREP_STUB_OBJS = yact/stub_dlls/faultrep_stub/dllmain.o yact/stub_dlls/faultrep_stub/stdafx.o yact/stub_dlls/faultrep_stub/faultrep.o
+GDI32_STUB_OBJS = yact/stub_dlls/gdi32_stub/dllmain.o yact/stub_dlls/gdi32_stub/gdi32.o yact/stub_dlls/gdi32_stub/stdafx.o
+GDIPLUS_STUB_OBJS = yact/stub_dlls/gdiplus_stub/dllmain.o yact/stub_dlls/gdiplus_stub/stdafx.o yact/stub_dlls/gdiplus_stub/gdiplus.o
+HID_STUB_OBJS = yact/stub_dlls/hid_stub/dllmain.o yact/stub_dlls/hid_stub/hid.o yact/stub_dlls/hid_stub/stdafx.o
+ICMUI_STUB_OBJS = yact/stub_dlls/icmui_stub/dllmain.o yact/stub_dlls/icmui_stub/stdafx.o yact/stub_dlls/icmui_stub/icmui.o
+IMAGEHLP_STUB_OBJS = yact/stub_dlls/imagehlp_stub/dllmain.o yact/stub_dlls/imagehlp_stub/stdafx.o yact/stub_dlls/imagehlp_stub/imagehlp.o
+IMM32_STUB_OBJS = yact/stub_dlls/imm32_stub/dllmain.o yact/stub_dlls/imm32_stub/stdafx.o yact/stub_dlls/imm32_stub/imm32.o
+IPHLPAPI_STUB_OBJS = yact/stub_dlls/iphlpapi_stub/dllmain.o yact/stub_dlls/iphlpapi_stub/stdafx.o yact/stub_dlls/iphlpapi_stub/iphlpapi.o
+KERNEL32_STUB_OBJS = yact/stub_dlls/kernel32_stub/dllmain.o yact/stub_dlls/kernel32_stub/kernel32.o yact/stub_dlls/kernel32_stub/kernel32_impl86.o yact/stub_dlls/kernel32_stub/stdafx.o
+KSUSER_STUB_OBJS = yact/stub_dlls/ksuser_stub/dllmain.o yact/stub_dlls/ksuser_stub/stdafx.o yact/stub_dlls/ksuser_stub/ksuser.o
+LZ32_STUB_OBJS = yact/stub_dlls/lz32_stub/dllmain.o yact/stub_dlls/lz32_stub/stdafx.o yact/stub_dlls/lz32_stub/lz32.o
+MAPI32_STUB_OBJS = yact/stub_dlls/mapi32_stub/dllmain.o yact/stub_dlls/mapi32_stub/stdafx.o yact/stub_dlls/mapi32_stub/mapi32.o
+MGMTAPI_STUB_OBJS = yact/stub_dlls/mgmtapi_stub/dllmain.o yact/stub_dlls/mgmtapi_stub/stdafx.o yact/stub_dlls/mgmtapi_stub/mgmtapi.o
+MPR_STUB_OBJS = yact/stub_dlls/mpr_stub/dllmain.o yact/stub_dlls/mpr_stub/mpr.o yact/stub_dlls/mpr_stub/stdafx.o
+MPRAPI_STUB_OBJS = yact/stub_dlls/mprapi_stub/dllmain.o yact/stub_dlls/mprapi_stub/stdafx.o yact/stub_dlls/mprapi_stub/mprapi.o
+MSACM32_STUB_OBJS = yact/stub_dlls/msacm32_stub/dllmain.o yact/stub_dlls/msacm32_stub/stdafx.o yact/stub_dlls/msacm32_stub/msacm32.o
+MSCMS_STUB_OBJS = yact/stub_dlls/mscms_stub/dllmain.o yact/stub_dlls/mscms_stub/stdafx.o yact/stub_dlls/mscms_stub/mscms.o
+MSDMO_STUB_OBJS = yact/stub_dlls/msdmo_stub/dllmain.o yact/stub_dlls/msdmo_stub/stdafx.o yact/stub_dlls/msdmo_stub/msdmo.o
+MSIMG32_STUB_OBJS = yact/stub_dlls/msimg32_stub/dllmain.o yact/stub_dlls/msimg32_stub/stdafx.o yact/stub_dlls/msimg32_stub/msimg32.o
+MSWSOCK_STUB_OBJS = yact/stub_dlls/mswsock_stub/dllmain.o yact/stub_dlls/mswsock_stub/stdafx.o yact/stub_dlls/mswsock_stub/mswsock.o
+NDDEAPI_STUB_OBJS = yact/stub_dlls/nddeapi_stub/dllmain.o yact/stub_dlls/nddeapi_stub/stdafx.o yact/stub_dlls/nddeapi_stub/nddeapi.o
+NETAPI32_STUB_OBJS = yact/stub_dlls/netapi32_stub/dllmain.o yact/stub_dlls/netapi32_stub/netapi32.o yact/stub_dlls/netapi32_stub/stdafx.o
+NEWDEV_STUB_OBJS = yact/stub_dlls/newdev_stub/dllmain.o yact/stub_dlls/newdev_stub/stdafx.o yact/stub_dlls/newdev_stub/newdev.o
+NTDLL_STUB_OBJS = yact/stub_dlls/ntdll_stub/dllmain.o yact/stub_dlls/ntdll_stub/ntdll.o yact/stub_dlls/ntdll_stub/stdafx.o
+ODBC32_STUB_OBJS = yact/stub_dlls/odbc32_stub/dllmain.o yact/stub_dlls/odbc32_stub/stdafx.o yact/stub_dlls/odbc32_stub/odbc32.o
+ODBCCP32_STUB_OBJS = yact/stub_dlls/odbccp32_stub/dllmain.o yact/stub_dlls/odbccp32_stub/stdafx.o yact/stub_dlls/odbccp32_stub/odbccp32.o
+OLE32_STUB_OBJS = yact/stub_dlls/ole32_stub/dllmain.o yact/stub_dlls/ole32_stub/ole32_86.o yact/stub_dlls/ole32_stub/ole32_impl86.o yact/stub_dlls/ole32_stub/stdafx.o
+OLEACC_STUB_OBJS = yact/stub_dlls/oleacc_stub/dllmain.o yact/stub_dlls/oleacc_stub/stdafx.o yact/stub_dlls/oleacc_stub/oleacc.o
+OLEAUT32_STUB_OBJS = yact/stub_dlls/oleaut32_stub/dllmain.o yact/stub_dlls/oleaut32_stub/oleaut32.o yact/stub_dlls/oleaut32_stub/stdafx.o
+OLEDLG_STUB_OBJS = yact/stub_dlls/oledlg_stub/dllmain.o yact/stub_dlls/oledlg_stub/stdafx.o yact/stub_dlls/oledlg_stub/oledlg.o
+POWRPROF_STUB_OBJS = yact/stub_dlls/powrprof_stub/dllmain.o yact/stub_dlls/powrprof_stub/stdafx.o yact/stub_dlls/powrprof_stub/powrprof.o
+PSAPI_STUB_OBJS = yact/stub_dlls/psapi_stub/dllmain.o yact/stub_dlls/psapi_stub/stdafx.o yact/stub_dlls/psapi_stub/psapi.o
+RASAPI32_STUB_OBJS = yact/stub_dlls/rasapi32_stub/dllmain.o yact/stub_dlls/rasapi32_stub/stdafx.o yact/stub_dlls/rasapi32_stub/rasapi32.o
+RASDLG_STUB_OBJS = yact/stub_dlls/rasdlg_stub/dllmain.o yact/stub_dlls/rasdlg_stub/stdafx.o yact/stub_dlls/rasdlg_stub/rasdlg.o
+RICHED20_STUB_OBJS = yact/stub_dlls/riched20_stub/dllmain.o yact/stub_dlls/riched20_stub/riched20.o
+RICHED32_STUB_OBJS = yact/stub_dlls/riched32_stub/dllmain.o yact/stub_dlls/riched32_stub/riched32.o
+RPCNS4_STUB_OBJS = yact/stub_dlls/rpcns4_stub/dllmain.o yact/stub_dlls/rpcns4_stub/stdafx.o yact/stub_dlls/rpcns4_stub/rpcns4.o
+RPCRT4_STUB_OBJS = yact/stub_dlls/rpcrt4_stub/dllmain.o yact/stub_dlls/rpcrt4_stub/stdafx.o yact/stub_dlls/rpcrt4_stub/rpcrt4.o
+RTUTILS_STUB_OBJS = yact/stub_dlls/rtutils_stub/dllmain.o yact/stub_dlls/rtutils_stub/stdafx.o yact/stub_dlls/rtutils_stub/rtutils.o
+SECUR32_STUB_OBJS = yact/stub_dlls/secur32_stub/dllmain.o yact/stub_dlls/secur32_stub/stdafx.o yact/stub_dlls/secur32_stub/secur32.o
+SETUPAPI_STUB_OBJS = yact/stub_dlls/setupapi_stub/dllmain.o yact/stub_dlls/setupapi_stub/stdafx.o yact/stub_dlls/setupapi_stub/setupapi.o
+SHELL32_STUB_OBJS = yact/stub_dlls/shell32_stub/dllmain.o yact/stub_dlls/shell32_stub/shell32.o yact/stub_dlls/shell32_stub/shell32_impl86.o yact/stub_dlls/shell32_stub/stdafx.o
+SHFOLDER_STUB_OBJS = yact/stub_dlls/shfolder_stub/dllmain.o yact/stub_dlls/shfolder_stub/stdafx.o yact/stub_dlls/shfolder_stub/shfolder.o
+SHLWAPI_STUB_OBJS = yact/stub_dlls/shlwapi_stub/dllmain.o yact/stub_dlls/shlwapi_stub/shlwapi.o yact/stub_dlls/shlwapi_stub/stdafx.o
+SNMPAPI_STUB_OBJS = yact/stub_dlls/snmpapi_stub/dllmain.o yact/stub_dlls/snmpapi_stub/stdafx.o yact/stub_dlls/snmpapi_stub/snmpapi.o
+TAPI32_STUB_OBJS = yact/stub_dlls/tapi32_stub/dllmain.o yact/stub_dlls/tapi32_stub/stdafx.o yact/stub_dlls/tapi32_stub/tapi32.o
+URL_STUB_OBJS = yact/stub_dlls/url_stub/dllmain.o yact/stub_dlls/url_stub/stdafx.o yact/stub_dlls/url_stub/url.o
+USER32_STUB_OBJS = yact/stub_dlls/user32_stub/dllmain.o yact/stub_dlls/user32_stub/stdafx.o yact/stub_dlls/user32_stub/user32.o
+USERENV_STUB_OBJS = yact/stub_dlls/userenv_stub/dllmain.o yact/stub_dlls/userenv_stub/stdafx.o yact/stub_dlls/userenv_stub/userenv.o
+USP10_STUB_OBJS = yact/stub_dlls/usp10_stub/dllmain.o yact/stub_dlls/usp10_stub/stdafx.o yact/stub_dlls/usp10_stub/usp10.o
+UXTHEME_STUB_OBJS = yact/stub_dlls/uxtheme_stub/dllmain.o yact/stub_dlls/uxtheme_stub/stdafx.o yact/stub_dlls/uxtheme_stub/uxtheme_stub.o
+VERSION_STUB_OBJS = yact/stub_dlls/version_stub/dllmain.o yact/stub_dlls/version_stub/stdafx.o yact/stub_dlls/version_stub/version.o
+WIN32SPL_STUB_OBJS = yact/stub_dlls/win32spl_stub/dllmain.o yact/stub_dlls/win32spl_stub/stdafx.o yact/stub_dlls/win32spl_stub/win32spl.o
+WININET_STUB_OBJS = yact/stub_dlls/wininet_stub/dllmain.o yact/stub_dlls/wininet_stub/stdafx.o yact/stub_dlls/wininet_stub/wininet.o
+WINMM_STUB_OBJS = yact/stub_dlls/winmm_stub/dllmain.o yact/stub_dlls/winmm_stub/stdafx.o yact/stub_dlls/winmm_stub/winmm.o
+WINSPOOL_STUB_OBJS = yact/stub_dlls/winspool_stub/dllmain.o yact/stub_dlls/winspool_stub/stdafx.o yact/stub_dlls/winspool_stub/winspool.o
+WS2_32_STUB_OBJS = yact/stub_dlls/ws2_32_stub/dllmain.o yact/stub_dlls/ws2_32_stub/stdafx.o yact/stub_dlls/ws2_32_stub/ws2_32.o
+WSNMP32_STUB_OBJS = yact/stub_dlls/wsnmp32_stub/dllmain.o yact/stub_dlls/wsnmp32_stub/stdafx.o yact/stub_dlls/wsnmp32_stub/wsnmp32.o
+WSOCK32_STUB_OBJS = yact/stub_dlls/wsock32_stub/dllmain.o yact/stub_dlls/wsock32_stub/stdafx.o yact/stub_dlls/wsock32_stub/wsock32.o
+WTSAPI32_STUB_OBJS = yact/stub_dlls/wtsapi32_stub/dllmain.o yact/stub_dlls/wtsapi32_stub/stdafx.o yact/stub_dlls/wtsapi32_stub/wtsapi32.o
+
+STUB_NAMES = aclui advapi32 cfgmgr32 comctl32 comdlg32 crypt32 d3d9 dbghelp ddraw dhcpcsvc dinput8 dinput dnsapi dsound faultrep gdi32 gdiplus hid icmui imagehlp imm32 iphlpapi kernel32 ksuser lz32 mapi32 mgmtapi mpr mprapi msacm32 mscms msdmo msimg32 mswsock nddeapi netapi32 newdev ntdll odbc32 odbccp32 ole32 oleacc oleaut32 oledlg powrprof psapi rasapi32 rasdlg riched20 riched32 rpcns4 rpcrt4 rtutils secur32 setupapi shell32 shfolder shlwapi snmpapi tapi32 url user32 userenv usp10 uxtheme version win32spl wininet winmm winspool ws2_32 wsnmp32 wsock32 wtsapi32
+
+# per-stub flags (same vcxproj settings the MSVC build uses)
+$(STUB_DLLS_DIR)/kernel32_stub/%.o: STUB_EXTRA_FLAGS += -fno-omit-frame-pointer
+$(STUB_DLLS_DIR)/ddraw_stub/%.o: STUB_EXTRA_FLAGS += -fno-rtti
+$(STUB_DLLS_DIR)/dinput8_stub/%.o: STUB_EXTRA_FLAGS += -DDIRECTINPUT_VERSION=0x800
+
+# ntdll.def / cfgmgr32.def add the forwarder exports (e.g. _CIcos=msvcrt._CIcos)
+STUB_DEFS_ntdll = $(STUB_DLLS_DIR)/ntdll_stub/ntdll.def
+STUB_DEFS_cfgmgr32 = $(STUB_DLLS_DIR)/cfgmgr32_stub/cfgmgr32.def
+
+define STUB_template
+$(STUB_DLLS_DIR)/$(1)_stub/%.o: $(STUB_DLLS_DIR)/$(1)_stub/%.cpp
+	$$(CXX) $$(STUB_CXXFLAGS) $$(STUB_EXTRA_FLAGS) -D$(2)_STUB_EXPORTS -I$$(STUB_DLLS_DIR)/$(1)_stub $$(INCLUDES) -c $$< -o $$@
+
+$(RELEASE_DIR)/$(1).86.dll: $$($(2)_STUB_OBJS) $(RELEASE_DIR)/supp.86.dll $$(STUB_CRT_OBJ)
+	$$(CXX) $$(STUB_LDFLAGS) -o $$@ $$($(2)_STUB_OBJS) $$(STUB_CRT_OBJ) $(RELEASE_DIR)/supp.86.dll $$(STUB_DEFS_$(1)) $$(STUB_LIBS)
+endef
+
+$(foreach s,$(STUB_NAMES),$(eval $(call STUB_template,$(s),$(shell echo $(s) | tr a-z A-Z))))
+
+# dinput8_stub compiles dinput_stub/dinput_common.cpp (see dinput8_stub.vcxproj)
+$(STUB_DLLS_DIR)/dinput8_stub/dinput_common.o: $(STUB_DLLS_DIR)/dinput_stub/dinput_common.cpp
+	$(CXX) $(STUB_CXXFLAGS) -DDIRECTINPUT_VERSION=0x800 -DDINPUT8_STUB_EXPORTS -I$(STUB_DLLS_DIR)/dinput8_stub $(INCLUDES) -c $< -o $@
+
+stubs: $(addprefix $(RELEASE_DIR)/,$(addsuffix .86.dll,$(STUB_NAMES)))
+
 clean:
 	rm -f $(SUPP_DIR)/*.o $(YACT_EMU_DIR)/*.o $(X86_EMU_DIR)/*.o $(CBACKS_DIR)/*.o
 	rm -f $(RELEASE_DIR)/*.dll
+	rm -f $(STUB_DLLS_DIR)/*.o $(STUB_DLLS_DIR)/*/*.o
 
-.PHONY: all clean
+.PHONY: all clean stubs

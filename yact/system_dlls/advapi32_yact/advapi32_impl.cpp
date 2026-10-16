@@ -209,15 +209,14 @@ void CleanupAdvapi()
 
 extern "C" __declspec(dllexport) DWORD Redirect(DWORD Org)
 {
-	switch(Org)
-	{
-	case (DWORD)HKEY_CURRENT_USER:
+	// clang: (DWORD)HKEY_* is a pointer-to-integer cast and is not a constant
+	// expression, so this is an if-chain with the same semantics.
+	if(Org==(DWORD)(ULONG_PTR)HKEY_CURRENT_USER)
 		return (DWORD)RedirHKCU;
-	case (DWORD)HKEY_CLASSES_ROOT:
+	if(Org==(DWORD)(ULONG_PTR)HKEY_CLASSES_ROOT)
 		return (DWORD)RedirHKCR;
-	case (DWORD)HKEY_LOCAL_MACHINE:
+	if(Org==(DWORD)(ULONG_PTR)HKEY_LOCAL_MACHINE)
 		return (DWORD)RedirHKLM;
-	}
 	return (DWORD)Org;
 }
 
@@ -323,9 +322,9 @@ EXTERN_C DW STUB_EXPORT yact_RegOpenKeyExW(DW *R)
 //DEFINE_FUNC2(RegOverridePredefKey)
 EXTERN_C DW STUB_EXPORT yact_RegOverridePredefKey(DW *R)
 {
-	switch(p1)
+	// clang: (DWORD)HKEY_* is not a constant expression; if-chain, same semantics
+	if(p1==(DWORD)(ULONG_PTR)HKEY_CURRENT_USER)
 	{
-	case (DWORD)HKEY_CURRENT_USER:
 		if(p2)
 		{
 			RegCloseKey(RedirHKCU);
@@ -333,7 +332,9 @@ EXTERN_C DW STUB_EXPORT yact_RegOverridePredefKey(DW *R)
 		} else
 			RegCreateKeyExA(HKEY_CURRENT_USER,REDIR_PATH "HKCU",0,0,0,KEY_ALL_ACCESS,0,&RedirHKCU,0);
 		return ERROR_SUCCESS;
-	case (DWORD)HKEY_CLASSES_ROOT:
+	}
+	if(p1==(DWORD)(ULONG_PTR)HKEY_CLASSES_ROOT)
+	{
 		if(p2)
 		{
 			RegCloseKey(RedirHKCR);
@@ -341,7 +342,9 @@ EXTERN_C DW STUB_EXPORT yact_RegOverridePredefKey(DW *R)
 		} else
 			RegCreateKeyExA(HKEY_CURRENT_USER,REDIR_PATH "HKCU",0,0,0,KEY_ALL_ACCESS,0,&RedirHKCR,0);
 		return ERROR_SUCCESS;
-	case (DWORD)HKEY_LOCAL_MACHINE:
+	}
+	if(p1==(DWORD)(ULONG_PTR)HKEY_LOCAL_MACHINE)
+	{
 		if(p2)
 		{
 			RegCloseKey(RedirHKLM);
