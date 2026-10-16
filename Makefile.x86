@@ -16,6 +16,7 @@ DEFINES = -DWIN32 -D_WINDOWS -D_USRDLL -DNDEBUG
 YACT_EMU_DIR = yact/yact_emu
 X86_EMU_DIR = yact/x86_emu
 SUPP_DIR = yact/supp
+CBACKS_DIR = yact/cbacks
 RELEASE_DIR = release
 
 $(shell mkdir -p $(RELEASE_DIR))
@@ -23,8 +24,9 @@ $(shell mkdir -p $(RELEASE_DIR))
 SUPP_OBJS = $(SUPP_DIR)/dllmain.o $(SUPP_DIR)/logging.o $(SUPP_DIR)/supp.o
 YACT_EMU_OBJS = $(YACT_EMU_DIR)/cmdstream.o $(YACT_EMU_DIR)/dllmain.o $(YACT_EMU_DIR)/operands.o $(YACT_EMU_DIR)/onebytecmds.o $(YACT_EMU_DIR)/stdafx.o $(YACT_EMU_DIR)/twobytecmds.o $(YACT_EMU_DIR)/yact_emu.o
 X86_EMU_OBJS = $(X86_EMU_DIR)/dllmain.o $(X86_EMU_DIR)/stdafx.o $(X86_EMU_DIR)/x86_emu.o
+CBACKS_OBJS = $(CBACKS_DIR)/callbacks.o $(CBACKS_DIR)/dllmain.o
 
-all: $(RELEASE_DIR)/supp.nt.dll $(RELEASE_DIR)/yact_emu.dll $(RELEASE_DIR)/x86_emu.dll
+all: $(RELEASE_DIR)/supp.nt.dll $(RELEASE_DIR)/yact_emu.dll $(RELEASE_DIR)/x86_emu.dll $(RELEASE_DIR)/cbacks.nt.dll
 
 $(RELEASE_DIR)/supp.nt.dll: $(SUPP_OBJS)
 	$(CXX) $(LDFLAGS) -o $@ $^ -lkernel32 -luser32 -ladvapi32
@@ -35,6 +37,10 @@ $(RELEASE_DIR)/yact_emu.dll: $(YACT_EMU_OBJS)
 $(RELEASE_DIR)/x86_emu.dll: $(X86_EMU_OBJS) $(RELEASE_DIR)/supp.nt.dll
 	$(CXX) $(LDFLAGS) -o $@ $^ -lkernel32 -luser32
 
+# cbacks.nt.dll depends on supp.nt.dll; x86_emu.dll provides EmuExecute
+$(RELEASE_DIR)/cbacks.nt.dll: $(CBACKS_OBJS) $(RELEASE_DIR)/supp.nt.dll $(RELEASE_DIR)/x86_emu.dll
+	$(CXX) $(LDFLAGS) -o $@ $^ -lkernel32 -luser32 -ladvapi32
+
 $(SUPP_DIR)/%.o: $(SUPP_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) $(DEFINES) -DSUPP_EXPORTS $(INCLUDES) -c $< -o $@
 
@@ -44,8 +50,11 @@ $(YACT_EMU_DIR)/%.o: $(YACT_EMU_DIR)/%.cpp
 $(X86_EMU_DIR)/%.o: $(X86_EMU_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) $(DEFINES) -DX86_EMU_EXPORTS $(INCLUDES) -c $< -o $@
 
+$(CBACKS_DIR)/%.o: $(CBACKS_DIR)/%.cpp
+	$(CXX) $(CXXFLAGS) $(DEFINES) -DCBACKS_EXPORTS $(INCLUDES) -c $< -o $@
+
 clean:
-	rm -f $(SUPP_DIR)/*.o $(YACT_EMU_DIR)/*.o $(X86_EMU_DIR)/*.o
+	rm -f $(SUPP_DIR)/*.o $(YACT_EMU_DIR)/*.o $(X86_EMU_DIR)/*.o $(CBACKS_DIR)/*.o
 	rm -f $(RELEASE_DIR)/*.dll
 
 .PHONY: all clean

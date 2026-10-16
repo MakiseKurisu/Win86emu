@@ -24,6 +24,7 @@ DEFINES = -DWIN32 -D_WINDOWS -D_USRDLL -DNDEBUG
 YACT_EMU_DIR = yact/yact_emu
 X86_EMU_DIR = yact/x86_emu
 SUPP_DIR = yact/supp
+CBACKS_DIR = yact/cbacks
 STUB_DLLS_DIR = yact/stub_dlls
 RELEASE_DIR = release
 OBJ_DIR = obj
@@ -66,11 +67,18 @@ X86_EMU_OBJS = $(X86_EMU_DIR)/dllmain.o \
                $(X86_EMU_DIR)/stdafx.o \
                $(X86_EMU_DIR)/x86_emu.o
 
+# Source files for cbacks.nt.dll
+CBACKS_SRCS = $(CBACKS_DIR)/callbacks.cpp \
+              $(CBACKS_DIR)/dllmain.cpp
+
+CBACKS_OBJS = $(CBACKS_DIR)/callbacks.o \
+              $(CBACKS_DIR)/dllmain.o
+
 # Stub DLLs (optional, can be built with make stubs)
 STUB_DLLS = kernel32.86.dll user32.86.dll gdi32.86.dll advapi32.86.dll
 
 # Default target
-all: $(RELEASE_DIR)/supp.nt.dll $(RELEASE_DIR)/yact_emu.dll $(RELEASE_DIR)/x86_emu.dll
+all: $(RELEASE_DIR)/supp.nt.dll $(RELEASE_DIR)/yact_emu.dll $(RELEASE_DIR)/x86_emu.dll $(RELEASE_DIR)/cbacks.nt.dll
 
 # Link supp.nt.dll
 $(RELEASE_DIR)/supp.nt.dll: $(SUPP_OBJS)
@@ -84,6 +92,10 @@ $(RELEASE_DIR)/yact_emu.dll: $(YACT_EMU_OBJS)
 $(RELEASE_DIR)/x86_emu.dll: $(X86_EMU_OBJS) $(RELEASE_DIR)/supp.nt.dll
 	$(CXX) $(LDFLAGS) -o $@ $^ -lkernel32 -luser32
 
+# Link cbacks.nt.dll (depends on supp.nt.dll; x86_emu.dll provides EmuExecute)
+$(RELEASE_DIR)/cbacks.nt.dll: $(CBACKS_OBJS) $(RELEASE_DIR)/supp.nt.dll $(RELEASE_DIR)/x86_emu.dll
+	$(CXX) $(LDFLAGS) -o $@ $^ -lkernel32 -luser32 -ladvapi32
+
 # Compile supp sources
 $(SUPP_DIR)/%.o: $(SUPP_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) $(DEFINES) -DSUPP_EXPORTS $(INCLUDES) -c $< -o $@
@@ -96,6 +108,10 @@ $(YACT_EMU_DIR)/%.o: $(YACT_EMU_DIR)/%.cpp
 $(X86_EMU_DIR)/%.o: $(X86_EMU_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) $(DEFINES) -DX86_EMU_EXPORTS $(INCLUDES) -c $< -o $@
 
+# Compile cbacks sources
+$(CBACKS_DIR)/%.o: $(CBACKS_DIR)/%.cpp
+	$(CXX) $(CXXFLAGS) $(DEFINES) -DCBACKS_EXPORTS $(INCLUDES) -c $< -o $@
+
 # Build stub DLLs (optional target)
 stubs: $(patsubst %,$(RELEASE_DIR)/%,$(STUB_DLLS))
 
@@ -105,7 +121,7 @@ $(RELEASE_DIR)/%.86.dll: $(STUB_DLLS_DIR)/%_stub/*.cpp
 
 # Clean build artifacts
 clean:
-	rm -f $(SUPP_DIR)/*.o $(YACT_EMU_DIR)/*.o $(X86_EMU_DIR)/*.o
+	rm -f $(SUPP_DIR)/*.o $(YACT_EMU_DIR)/*.o $(X86_EMU_DIR)/*.o $(CBACKS_DIR)/*.o
 	rm -f $(RELEASE_DIR)/*.dll $(RELEASE_DIR)/*.exe
 
 # Phony targets
@@ -120,3 +136,4 @@ print-vars:
 	@echo "SUPP_OBJS: $(SUPP_OBJS)"
 	@echo "YACT_EMU_OBJS: $(YACT_EMU_OBJS)"
 	@echo "X86_EMU_OBJS: $(X86_EMU_OBJS)"
+	@echo "CBACKS_OBJS: $(CBACKS_OBJS)"

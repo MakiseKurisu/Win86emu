@@ -180,7 +180,11 @@ CB_EXPORT DW CbCreateX86StdcallCallback(void *NativeFunc, int NumParams)
     X86Callbacks[Cbd] = (DWORD) Ret;
     FlushProcessWriteBuffers();
 #ifdef _ARM_
+#ifdef _MSC_VER
     _DataSynchronizationBarrier();
+#else
+    __sync_synchronize();   // GCC/clang ARM: MSVC's ARM intrinsic is unavailable
+#endif
 #endif
     return (DWORD) Ret;
 }
@@ -274,7 +278,11 @@ CB_EXPORT DW CbCreateNativeStdcallCallbackEx(void *NativeFunc, DW FuncParam, int
     DWORD Tmp;
     VirtualProtect(Ret, sizeof(CBCode), PAGE_EXECUTE_READWRITE, &Tmp);
 #ifdef _ARM_
+#ifdef _MSC_VER
     _DataSynchronizationBarrier();
+#else
+    __sync_synchronize();   // GCC/clang ARM: MSVC's ARM intrinsic is unavailable
+#endif
 #endif
     FlushProcessWriteBuffers();
     FlushInstructionCache(GetCurrentProcess(), Ret, sizeof(CBCode));
@@ -317,7 +325,7 @@ static DWORD Cb8P(void* Param, DW *R)
 {
     return EmuExecute((DWORD) Param, 8, p1, p2, p3, p4, p5, p6, p7, p8);
 }
-static void *CbFuncs[] = { Cb0P, Cb1P, Cb2P, Cb3P, Cb4P, Cb5P, Cb6P, Cb7P, Cb8P };
+static void *CbFuncs[] = { (void*) Cb0P, (void*) Cb1P, (void*) Cb2P, (void*) Cb3P, (void*) Cb4P, (void*) Cb5P, (void*) Cb6P, (void*) Cb7P, (void*) Cb8P };
 
 CB_EXPORT DW CbCreateNativeStdcallCallback(DW Param, int NumParams)
 {
