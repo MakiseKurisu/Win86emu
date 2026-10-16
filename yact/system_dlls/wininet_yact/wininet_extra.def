@@ -1,0 +1,27 @@
+; wininet_extra.def - import definitions for wininet.dll exports that are
+; present in the MSVC Windows SDK import library (wininet.lib) but missing
+; from LLVM-MinGW's libwininet.a (undocumented/legacy exports).
+;
+; The yact wininet replacement DLL references these symbols because the
+; original sources declare them next to the yact_* implementations; the MSVC
+; build resolves them from wininet.lib.  Generate an import library with:
+;   llvm-dlltool -m arm -D wininet.dll -d wininet_extra.def -l wininet_extra.a
+LIBRARY wininet.dll
+EXPORTS
+DoConnectoidsExist
+ExportCookieFileA
+ExportCookieFileW
+FindP3PPolicySymbol
+FreeP3PObject
+GetDiskInfoA
+GetP3PPolicy
+GetP3PRequestStatus
+HttpCheckDavComplianceA
+HttpCheckDavComplianceW
+ImportCookieFileA
+ImportCookieFileW
+IsDomainLegalCookieDomainA
+IsDomainLegalCookieDomainW
+IsProfilesEnabled
+MapResourceToPolicy
+PerformOperationOverUrlCacheA

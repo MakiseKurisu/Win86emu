@@ -92,12 +92,18 @@ CB_EXPORT void* CbCallAtThreadExit(void* Func, void*Param)
     {
         Nl = new CList;
         if (Nl == 0)
+        {
+            LogErr("CbCallAtThreadExit: out of memory (thread notification list)");
             return FALSE;
+        }
         Notifications.Set(GetCurrentThreadId(), Nl);
     }
     CbNotif *Nf = (CbNotif*) malloc(sizeof(CbNotif));
     if (Nf == 0)
+    {
+        LogErr("CbCallAtThreadExit: out of memory (notification node)");
         return NULL;
+    }
     Nf->Func = (CbNotifyFunc*) Func;
     Nf->Data = Param;
     return Nl->AddHead(Nf) ? Param : NULL;	// Adding at head optimises the remove process
@@ -148,7 +154,10 @@ CB_EXPORT DW CbCreateX86StdcallCallback(void *NativeFunc, int NumParams)
     */
     static BYTE CBCode[] = { 0x55, 0x8B, 0xEC, 0x8D, 0x45, 0x08, 0xEB, 0x05, 0xB8, 0xDE, 0xC0, 0xAD, 0xDE, 0xE5, 0xE5, 0x8B, 0xE5, 0x5D, 0xC2, 0x20, 0 };
     if (NativeFunc == 0)
+    {
+        LogErr("CbCreateX86StdcallCallback: NativeFunc==0");
         return 0;
+    }
 
     CbDescr Cbd;
     Cbd.NativeFunc = (DWORD) NativeFunc;
@@ -161,14 +170,21 @@ CB_EXPORT DW CbCreateX86StdcallCallback(void *NativeFunc, int NumParams)
 
     BYTE *Ret = (BYTE*) malloc(sizeof(CBCode));
     if (Ret == 0)
+    {
+        LogErr("CbCreateX86StdcallCallback: out of memory (%d bytes, NumParams=%d)", (int) sizeof(CBCode), NumParams);
         return 0;
+    }
     memcpy(Ret, CBCode, sizeof(CBCode));
     *(DWORD*) (Ret + 9) = 0x80000000 | (DWORD) NativeFunc;
     *(WORD*) (Ret + sizeof(CBCode) -2) = (WORD) NumParams * 4;
     X86Callbacks[Cbd] = (DWORD) Ret;
     FlushProcessWriteBuffers();
 #ifdef _ARM_
+#ifdef _MSC_VER
     _DataSynchronizationBarrier();
+#else
+    __sync_synchronize();   // GCC/clang ARM: MSVC's ARM intrinsic is unavailable
+#endif
 #endif
     return (DWORD) Ret;
 }
@@ -193,7 +209,10 @@ CB_EXPORT DW CbCreateNativeCdeclCallback(DW Param)
 CB_EXPORT DW CbCreateNativeStdcallCallbackEx(void *NativeFunc, DW FuncParam, int NumParams)
 {
     if (NativeFunc == 0 || FuncParam == 0)
+    {
+        LogErr("CbCreateNativeStdcallCallbackEx: NativeFunc=%p FuncParam=0x%08X", NativeFunc, (unsigned int) FuncParam);
         return 0;
+    }
     CbDescr Cbd;
     Cbd.NativeFunc = (DWORD) NativeFunc;
     Cbd.FuncParam = FuncParam;
@@ -220,7 +239,10 @@ CB_EXPORT DW CbCreateNativeStdcallCallbackEx(void *NativeFunc, DW FuncParam, int
     static BYTE CBCode[]={/*0xfe,0xde,0xfe,0xde,*/  0x0F,0xB4,0x2D,0xE9,0x00,0x48,0xEB,0x46,0x04,0x4B,0x03,0x48,0x02,0xA9,0x98,0x47,0x5D,0xF8,0x04,0xBB,0x5D,0xF8,0x14,0xFB,0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88};
     BYTE *Ret=(BYTE*)malloc(sizeof(CBCode));
     if(Ret==0)
+    {
+        LogErr("CbCreateNativeStdcallCallbackEx: out of memory (%d bytes, ARM)", (int) sizeof(CBCode));
         return 0;
+    }
 
     memcpy(Ret,CBCode,sizeof(CBCode));
     *(DWORD*)(Ret+sizeof(CBCode)-8)=(DWORD)FuncParam;
@@ -243,7 +265,10 @@ CB_EXPORT DW CbCreateNativeStdcallCallbackEx(void *NativeFunc, DW FuncParam, int
     static BYTE CBCode[] = { 0x90, 0x55, 0x8B, 0xEC, 0x8D, 0x45, 0x08, 0x50, 0x68, 0xCC, 0xCC, 0xCC, 0xCC, 0xb8, 0xcc, 0xcc, 0xcc, 0xcc, 0xff, 0xd0, 0x89, 0xec, 0x5d, 0xc2, 0x00, 0x00 };
     BYTE *Ret = (BYTE*) malloc(sizeof(CBCode));
     if (Ret == 0)
+    {
+        LogErr("CbCreateNativeStdcallCallbackEx: out of memory (%d bytes, x86)", (int) sizeof(CBCode));
         return 0;
+    }
     memcpy(Ret, CBCode, sizeof(CBCode));
     *(DWORD*) (Ret + 8 + 1) = (DWORD) FuncParam;
     *(DWORD*) (Ret + 13 + 1) = (DWORD) NativeFunc;
@@ -253,7 +278,11 @@ CB_EXPORT DW CbCreateNativeStdcallCallbackEx(void *NativeFunc, DW FuncParam, int
     DWORD Tmp;
     VirtualProtect(Ret, sizeof(CBCode), PAGE_EXECUTE_READWRITE, &Tmp);
 #ifdef _ARM_
+#ifdef _MSC_VER
     _DataSynchronizationBarrier();
+#else
+    __sync_synchronize();   // GCC/clang ARM: MSVC's ARM intrinsic is unavailable
+#endif
 #endif
     FlushProcessWriteBuffers();
     FlushInstructionCache(GetCurrentProcess(), Ret, sizeof(CBCode));
@@ -286,23 +315,30 @@ static DWORD Cb5P(void* Param, DW *R)
 }
 static DWORD Cb6P(void* Param, DW *R)
 {
-    return EmuExecute((DWORD) Param, 5, p1, p2, p3, p4, p5, p6);
+    return EmuExecute((DWORD) Param, 6, p1, p2, p3, p4, p5, p6);
 }
 static DWORD Cb7P(void* Param, DW *R)
 {
-    return EmuExecute((DWORD) Param, 5, p1, p2, p3, p4, p5, p6, p7);
+    return EmuExecute((DWORD) Param, 7, p1, p2, p3, p4, p5, p6, p7);
 }
 static DWORD Cb8P(void* Param, DW *R)
 {
-    return EmuExecute((DWORD) Param, 5, p1, p2, p3, p4, p5, p6, p7, p8);
+    return EmuExecute((DWORD) Param, 8, p1, p2, p3, p4, p5, p6, p7, p8);
 }
-static void *CbFuncs[] = { Cb0P, Cb1P, Cb2P, Cb3P, Cb4P, Cb5P, Cb6P, Cb7P, Cb8P };
+static void *CbFuncs[] = { (void*) Cb0P, (void*) Cb1P, (void*) Cb2P, (void*) Cb3P, (void*) Cb4P, (void*) Cb5P, (void*) Cb6P, (void*) Cb7P, (void*) Cb8P };
 
 CB_EXPORT DW CbCreateNativeStdcallCallback(DW Param, int NumParams)
 {
     if (Param == 0)
+    {
+        LogErr("CbCreateNativeStdcallCallback: Param==0");
         return 0;
-    if (NumParams > sizeof(CbFuncs) / sizeof(CbFuncs[0]))
+    }
+    if (NumParams < 0 || NumParams >= (int) (sizeof(CbFuncs) / sizeof(CbFuncs[0])))
+    {
+        LogErr("CbCreateNativeStdcallCallback: NumParams %d out of range 0..%d",
+            NumParams, (int) (sizeof(CbFuncs) / sizeof(CbFuncs[0])) - 1);
         return 0;
+    }
     return CbCreateNativeStdcallCallbackEx(CbFuncs[NumParams], Param, NumParams);
 }

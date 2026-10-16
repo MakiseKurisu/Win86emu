@@ -11,6 +11,7 @@
 // Windows Header Files:
 #include <windows.h>
 
-
+// Note: std::mutex disabled for MinGW win32 threading model compatibility
+// Using CRITICAL_SECTION instead for thread safety in logging.cpp
 
 // TODO: reference additional headers your program requires here

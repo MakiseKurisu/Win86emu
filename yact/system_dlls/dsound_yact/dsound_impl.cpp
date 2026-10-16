@@ -1,8 +1,19 @@
 #define CINTERFACE	// I need C interface for DDraw for lpVtbl member
 #include "dllyact_def.h"
 #include "comobject_def.h"
+// mingw's dsound.h uses p1..p4 as parameter names; hide the dllyact_def.h
+// argument macros while it is parsed (no-op for MSVC, whose dsound.h uses
+// different parameter names)
+#undef p1
+#undef p2
+#undef p3
+#undef p4
 #include <windows.h>
 #include <dsound.h>
+#define p1 (R[0])
+#define p2 (R[1])
+#define p3 (R[2])
+#define p4 (R[3])
 #include "callbacks.h"
 
 DEFINE_COMFUNC3(DS,IDirectSoundVtbl,SetCooperativeLevel)

@@ -14,6 +14,7 @@ D1F8                 bne         yact_InterlockedIncrement+6h (69A91366h)
 F3BF 8F5B            dmb         ish  
 4770				 BX			  lr
 */
+#if defined(_MSC_VER)
 	__emit(0xF3BF); 
 	__emit(0x8F5B);
 	__emit(0x0002);
@@ -27,6 +28,24 @@ F3BF 8F5B            dmb         ish
 	__emit(0xF3BF);
 	__emit(0x8F5B);
 	__emit(0x4770);
+#else
+	// clang: __emit() is MSVC-only and non-asm statements are not allowed in
+	// naked functions; emit the same Thumb-2 halfwords as raw data.
+	__asm(
+		".short 0xF3BF\n"
+		".short 0x8F5B\n"
+		".short 0x0002\n"
+		".short 0xE8D2\n"
+		".short 0x0F4F\n"
+		".short 0x3001\n"
+		".short 0xE8C2\n"
+		".short 0x0F43\n"
+		".short 0x2B00\n"
+		".short 0xD1F8\n"
+		".short 0xF3BF\n"
+		".short 0x8F5B\n"
+		".short 0x4770\n");
+#endif
 }
 
 extern "C" __declspec(naked) void volatile _InterlockedDecrement8(unsigned char *ptr)	
@@ -42,6 +61,7 @@ D1F8                 bne         yact_InterlockedIncrement+6h (69A91366h)
 F3BF 8F5B            dmb         ish  
 4770				 BX			  lr
 */
+#if defined(_MSC_VER)
 	__emit(0xF3BF); 
 	__emit(0x8F5B);
 	__emit(0x0002);
@@ -55,6 +75,23 @@ F3BF 8F5B            dmb         ish
 	__emit(0xF3BF);
 	__emit(0x8F5B);
 	__emit(0x4770);
+#else
+	// clang: see _InterlockedIncrement8 above
+	__asm(
+		".short 0xF3BF\n"
+		".short 0x8F5B\n"
+		".short 0x0002\n"
+		".short 0xE8D2\n"
+		".short 0x0F4F\n"
+		".short 0x3801\n"
+		".short 0xE8C2\n"
+		".short 0x0F43\n"
+		".short 0x2B00\n"
+		".short 0xD1F8\n"
+		".short 0xF3BF\n"
+		".short 0x8F5B\n"
+		".short 0x4770\n");
+#endif
 }
 #else
 extern "C" __declspec(naked) void volatile _InterlockedIncrement8(unsigned char *_ptr)	

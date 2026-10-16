@@ -78,9 +78,11 @@ public:
         Data = 0;//((ICallbackUnknown<IVtbl>*)_IOriginal)->Data;
         Vtbl = (IVtbl*) malloc(sizeof(IVtbl));
         memset(Vtbl, 0, sizeof(IVtbl));
-        *((DWORD*) Vtbl + 0) = CbCreateX86StdcallCallback(ICallbackUnknown::QueryInterface, 3);
-        *((DWORD*) Vtbl + 1) = CbCreateX86StdcallCallback(ICallbackUnknown::AddRef, 1);
-        *((DWORD*) Vtbl + 2) = CbCreateX86StdcallCallback(ICallbackUnknown::Release, 1);
+        // clang/mingw: function pointers do not implicitly convert to void*
+        // (the cast is a no-op for MSVC)
+        *((DWORD*) Vtbl + 0) = CbCreateX86StdcallCallback((void*)ICallbackUnknown::QueryInterface, 3);
+        *((DWORD*) Vtbl + 1) = CbCreateX86StdcallCallback((void*)ICallbackUnknown::AddRef, 1);
+        *((DWORD*) Vtbl + 2) = CbCreateX86StdcallCallback((void*)ICallbackUnknown::Release, 1);
     }
     ~ICallbackUnknown()
     {
@@ -97,11 +99,13 @@ public:
     }
 };
 
+// clang/mingw: function pointers do not implicitly convert to void*
+// (the cast is a no-op for MSVC)
 #define DEFINE_CALLBACK(prefix,name,nparams) 	\
-    *(DWORD*)(&prefix->Vtbl->name)=CbCreateX86StdcallCallback(prefix##_##name,nparams);
+    *(DWORD*)(&prefix->Vtbl->name)=CbCreateX86StdcallCallback((void*)(prefix##_##name),nparams);
 
 #define DEFINE_VER_CALLBACK(ver,prefix,name,nparams) 	\
-    *(DWORD*)(&prefix->Vtbl->name)=CbCreateX86StdcallCallback(prefix##ver##_##name,nparams);
+    *(DWORD*)(&prefix->Vtbl->name)=CbCreateX86StdcallCallback((void*)(prefix##ver##_##name),nparams);
 
 #define DEFINE_CALLBACK1(prefix,type,name) 	DEFINE_CALLBACK(prefix,name,1)
 #define DEFINE_CALLBACK2(prefix,type,name) 	DEFINE_CALLBACK(prefix,name,2)

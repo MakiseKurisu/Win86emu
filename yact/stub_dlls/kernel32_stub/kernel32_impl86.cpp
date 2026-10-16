@@ -4,6 +4,12 @@
 #include <util.h>
 #include <intrin.h>
 
+#if !defined(_MSC_VER)
+// mingw-w64 declares _ReturnAddress() in <intrin.h> but ships no definition;
+// map it to the compiler builtin (MSVC keeps its own intrinsic).
+#define _ReturnAddress() __builtin_return_address(0)
+#endif
+
 //DEFINE_FUNC4(RtlUnwind)
 
 /*struct EXCEPTION_REGISTRATION_RECORD {
@@ -69,6 +75,7 @@ ExecuteHandler(
    IN void* ExceptionRoutine
    )
 {
+#if defined(_MSC_VER)
 	__asm {
 		push    ebp
 		mov     ebp,esp
@@ -84,11 +91,36 @@ ExecuteHandler(
 		pop     ebp
 		ret		20
 	}
+#else
+	// MSVC resolves parameter names inside naked functions; other compilers do
+	// not, so the same argument slots are addressed through ebp directly.
+	// (basic asm: naked functions must not use extended asm with operands)
+	__asm__(
+		"pushl %ebp\n\t"
+		"movl %esp, %ebp\n\t"
+		"pushl 20(%ebp)\n\t"
+		"pushl 16(%ebp)\n\t"
+		"pushl 12(%ebp)\n\t"
+		"pushl 8(%ebp)\n\t"
+		"movl 24(%ebp), %ecx\n\t"
+		"calll *%ecx\n\t"
+		"movl %ebp, %esp\n\t"
+		"popl %ebp\n\t"
+		"retl $20\n\t"
+	);
+#endif
 }
 
 #define READDW(addr) (*(DWORD*)(addr))
 
+#if defined(_MSC_VER)
 extern "C" void __declspec(naked) __declspec(dllexport) __stdcall stub_RtlUnwind(
+#else
+// Non-MSVC compilers reject C code inside naked functions; the same prologue
+// is reconstructed from a regular frame pointer instead (this file is built
+// with -fno-omit-frame-pointer, see Makefile.arm / Makefile.x86).
+extern "C" void __declspec(dllexport) __stdcall stub_RtlUnwind(
+#endif
 	EXCEPTION_REGISTRATION_RECORD* TargetFrame, 
 	PVOID TargetIp,
 	PEXCEPTION_RECORD Record, 
@@ -101,6 +133,7 @@ extern "C" void __declspec(naked) __declspec(dllexport) __stdcall stub_RtlUnwind
 	EXCEPTION_REGISTRATION_RECORD* Rec;
 	DWORD Ret;
 
+#if defined(_MSC_VER)
 	__asm {
 		mov		eax,esp
 		mov		ecx,ebp
@@ -110,6 +143,13 @@ extern "C" void __declspec(naked) __declspec(dllexport) __stdcall stub_RtlUnwind
 		mov		_Esp,eax
 		mov		_Ebp,ecx
 	}	// For unwind to work - we need to save exact ESP and EBP values of a caller
+#else
+	{	// For unwind to work - we need to save exact ESP and EBP values of a caller
+		void *Fp = __builtin_frame_address(0);
+		_Ebp = *(DWORD*) Fp;
+		_Esp = (DWORD) Fp + 4;
+	}
+#endif
 
 	Ctx.Esp=_Esp+16+4;	// 4 params + retaddr
 	Ctx.Ebp=_Ebp;
@@ -140,7 +180,7 @@ extern "C" void __declspec(naked) __declspec(dllexport) __stdcall stub_RtlUnwind
 	while(Rec!=(EXCEPTION_REGISTRATION_RECORD*)-1 && Rec!=TargetFrame)
 	{
 		LogInfo("RtlUnwind executing handler: %08X\n",Rec->Handler);
-		Ret=ExecuteHandler(Record,Rec,&Ctx,Disp,Rec->Handler);
+		Ret=ExecuteHandler(Record,Rec,&Ctx,Disp,(void*)Rec->Handler);
 		Rec=Rec->Next;
 		*(DWORD*)NtCurrentTeb()=(DWORD)Rec;
 		// We support only ExceptionContinueSearch
@@ -152,6 +192,7 @@ extern "C" void __declspec(naked) __declspec(dllexport) __stdcall stub_RtlUnwind
 	}
 	LogErr("RtlUnwind: continuing execution, EIP=%08x, ESP=%08X",Ctx.Eip,Ctx.Esp);
 	// Continue
+#if defined(_MSC_VER)
 	__asm {
 		mov eax,Ctx.Eax
 		mov esi,Ctx.Eip
@@ -161,6 +202,18 @@ extern "C" void __declspec(naked) __declspec(dllexport) __stdcall stub_RtlUnwind
 		mov ebp,ebx
 		jmp esi
 	}
+#else
+	__asm__ __volatile__(
+		"movl %0, %%eax\n\t"
+		"movl %1, %%esi\n\t"
+		"movl %2, %%ebx\n\t"
+		"movl %3, %%ecx\n\t"
+		"movl %%ecx, %%esp\n\t"
+		"movl %%ebx, %%ebp\n\t"
+		"jmp *%%esi"
+		:: "m"(Ctx.Eax), "m"(Ctx.Eip), "m"(Ctx.Ebp), "m"(Ctx.Esp)
+	);
+#endif
 }
 
 extern "C" void __declspec(dllexport) __stdcall stub_RaiseException(
@@ -188,10 +241,18 @@ extern "C" void __declspec(dllexport) __stdcall stub_RaiseException(
 	if (nNumberOfArguments > EXCEPTION_MAXIMUM_PARAMETERS) nNumberOfArguments = EXCEPTION_MAXIMUM_PARAMETERS;
 
 	Ctx.ContextFlags = CONTEXT_INTEGER | CONTEXT_CONTROL | CONTEXT_SEGMENTS;
+#if defined(_MSC_VER)
 	__asm {
 		mov Ctx.Esp,esp
 		mov Ctx.Ebp,ebp
 	}	// for RaiseException we don't need the exact register values
+#else
+	__asm__ __volatile__(
+		"movl %%esp, %0\n\t"
+		"movl %%ebp, %1"
+		: "=m"(Ctx.Esp), "=m"(Ctx.Ebp)
+	);	// for RaiseException we don't need the exact register values
+#endif
 	Ctx.EFlags=__readeflags();
 	Ctx.SegCs=Ctx.SegDs=Ctx.SegEs=Ctx.SegFs=Ctx.SegGs=Ctx.SegSs=0;
 	Ctx.Eax=Ctx.Ebx=Ctx.Ecx=Ctx.Edx=Ctx.Esi=Ctx.Edi=0;
@@ -215,7 +276,7 @@ extern "C" void __declspec(dllexport) __stdcall stub_RaiseException(
 	while(Handler && (DWORD)Handler!=-1 /*&& !CbIsReturnToHost((DWORD)Handler->Handler)*/)
 	{
 		LogInfo("RaiseException executing handler: %08X\n",Handler->Handler);
-		Ret=ExecuteHandler(&Er,Handler,&Ctx,Disp,Handler->Handler);
+		Ret=ExecuteHandler(&Er,Handler,&Ctx,Disp,(void*)Handler->Handler);
 		LogInfo("RaiseException handler returned: %08X\n",Ret);
 		if(Ret==ExceptionContinueExecution)
 		{

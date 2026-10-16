@@ -29,6 +29,10 @@ int _tmain(int argc, _TCHAR* argv[])
     STARTUPINFOA si;
     PROCESS_INFORMATION pi;
     int Count = 0;
+    // declared here (not before its first use) so that the forward goto Done
+    // below does not jump into the scope of an initialized variable (clang
+    // rejects what MSVC accepts as an extension)
+    DWORD Ex = 0;
 
     char FakeCmdLine1[32768];
     char* FakeCmdLine = new char[32768];
@@ -104,7 +108,7 @@ Loop:
 
     Ret = WaitForSingleObject(pi.hProcess, INFINITE);
 
-    DWORD Ex = 0;
+    Ex = 0;
     GetExitCodeProcess(pi.hProcess, &Ex);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);

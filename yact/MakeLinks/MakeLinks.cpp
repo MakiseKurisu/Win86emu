@@ -1,6 +1,13 @@
 // MakeLinks.cpp : Defines the entry point for the console application.
 //
 
+// MinGW's winbase.h defaults to _WIN32_WINNT 0x0502 and only declares
+// CreateSymbolicLinkA / SYMBOLIC_LINK_FLAG_DIRECTORY at 0x0600 or later; the
+// Windows SDK headers used by the MSVC build expose them unconditionally.
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
+#endif
+
 #include "stdafx.h"
 #include <windows.h>
 #include <stdio.h>
