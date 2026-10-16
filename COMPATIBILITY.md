@@ -51,9 +51,12 @@ This document tracks the compatibility status of x86 applications running on Win
 
 ### Unimplemented Features
 
-1. **SSE/MMX Instructions**: Many multimedia applications require SSE instructions which are not fully implemented.
-   - Implemented: Basic scalar operations (MOVSS, ADDSS, SUBSS)
-   - Not implemented: Vector operations, most SSE2/SSE3/SSSE3+
+1. **SSE Instructions**: Many multimedia applications require SSE instructions, which no engine in this repository implements.
+   - The DOSBox-based engine (`dosbox_emu.dll`) decodes the integer and MMX instruction sets, but it has no XMM registers and no SSE opcodes; its CPUID reports only FPU+TSC (no SSE and no MMX feature bit) and an SSE opcode raises an illegal-instruction exception.
+   - The Bochs-based engine (`bochs_emu.dll`) is built with `BX_CPU_LEVEL 5` ("be compatible with no SSE in DosBox core!"), which disables SSE and MMX.
+   - The experimental engine (`yact_emu.dll`) contains no SSE handlers and is not part of the installed runtime.
+   - The x87 FPU is provided by the DOSBox and Bochs engines; MMX is provided by the DOSBox engine only.
+   - Not implemented: SSE, SSE2, SSE3, SSSE3 and later instruction sets.
 
 2. **DirectX**: No DirectX emulation support. Games and applications requiring hardware acceleration will not work.
 
@@ -69,16 +72,31 @@ This document tracks the compatibility status of x86 applications running on Win
 
 ## How to Test an Application
 
-1. Copy the ARM DLLs to your Windows RT device:
-   - `yact_emu_arm.dll`
-   - `x86_emu_arm.dll`
-   - `supp_arm.dll`
+1. Install Win86emun on the Windows RT device (the device must be jailbroken to run x86 code).
+   The installer places the emulator files in the Windows directory (`%SystemRoot%`), not next to the
+   application. The runtime file set is:
 
-2. Place them in the same directory as your x86 application executable.
+   - `Launcher.exe` - starts an emulated x86 application
+   - `x86_emu.dll` - emulator front end; it loads the engine DLLs when it is first used
+   - `dosbox_emu.dll` and `dosbox_emu1.dll` ... `dosbox_emu15.dll` - the primary engine (16 slots;
+     the release build requires all 16 files)
+   - `bochs_emu.dll` - the fallback engine used when every DOSBox slot is busy
+   - `cbacks.nt.dll` - callback layer between the emulated code and the host
+   - `supp.nt.dll` - shared support code (logging, configuration)
+   - the `*.86.dll` stub DLLs and the `*.nt.dll` system DLLs
 
-3. Run the application and observe behavior.
+   These names are fixed. `x86_emu.dll` looks the other modules up by name
+   (`LoadLibraryA("cbacks.nt.dll")`, `"dosbox_emu.dll"`, `"bochs_emu.dll"`), so renaming the files
+   (for example to `x86_emu_arm.dll`) makes the emulator exit during startup. `yact_emu.dll` is an
+   experimental engine; it is neither installed nor loaded.
 
-4. Check `win86emu.log` for error messages if the application fails.
+2. Start the application through the installed launcher instead of copying DLLs next to the
+   application executable.
+
+3. Run the application and observe its behavior.
+
+4. Check `%TEMP%\win86emu.log` (or the path set in the `LogFile` registry value) for error messages
+   if the application fails.
 
 ## Reporting Issues
 

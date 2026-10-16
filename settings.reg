@@ -1,12 +1,23 @@
 REGEDIT4
 
-[HKEY_LOCAL_MACHINE\SOFTWARE\Yact]
-"LogLevel"=dword:00000004
-"LogFile"=hex(2):25,74,65,6d,70,25,5c,79,61,63,74,2e,6c,6f,67,00
-"Engine"="U:\\DynamicTranslator\\Release\\dosbox_emu.dll"
+; Win86emun settings (machine-wide defaults; HKCU is checked before HKLM).
+; The emulator reads these values once per process - restart the application
+; after changing them. See LOGGING.md for the debug log details.
+;
+; LogLevel      0=off 1=ERROR 2=WARN (default) 3=INFO 4=DEBUG 5=TRACE
+; LogFile       full path of the log file (default: %TEMP%\win86emu.log).
+;               REG_SZ or REG_EXPAND_SZ; environment variables are expanded.
+; LogMaxSizeKB  rotate the log when it reaches this size in KB, 0 disables it
 
-[HKEY_LOCAL_MACHINE\SOFTWARE\Yact\Compatibility]
+[HKEY_LOCAL_MACHINE\SOFTWARE\x86node\Settings]
+"LogLevel"=dword:00000002
+"LogFile"=hex(2):25,54,45,4d,50,25,5c,77,69,6e,38,36,65,6d,75,2e,6c,6f,67,00
+"LogMaxSizeKB"=dword:00002000
 
-[HKEY_LOCAL_MACHINE\SOFTWARE\Yact\Compatibility\Heroes3.exe]
+; Per-program compatibility settings (CompatGetInt) are read from
+; ...\Compatibility\<exe name> first, then from ...\Compatibility itself.
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\x86node\Compatibility]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\x86node\Compatibility\Heroes3.exe]
 "NoRaiseException"=dword:00000001
-

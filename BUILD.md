@@ -36,9 +36,20 @@ make -j$(nproc)
 ```
 
 Output DLLs will be in `release/` directory:
-- `yact_emu_x86.dll` - Emulation core (x86)
-- `x86_emu_x86.dll` - Wrapper DLL (x86)
-- `supp_x86.dll` - Utility DLL (x86)
+- `yact_emu.dll` - experimental emulation core (x86); not used at runtime
+- `x86_emu.dll` - emulator front end (x86)
+- `supp.nt.dll` - support DLL (x86)
+
+Note: the make build only produces the three DLLs above (and the `*.86.dll` stub DLLs when they are
+requested explicitly). The engine DLLs that `x86_emu.dll` loads at runtime
+(`dosbox_emu.dll` + `dosbox_emu1..15.dll`, `bochs_emu.dll`, `cbacks.nt.dll`) are built from the
+Visual Studio solution (`yact.sln`), which is also what `Setup/Setup.isl` packages. A runtime
+directory assembled from the make output alone cannot start an emulated application.
+
+The solution contains a single `dosbox_emu` project. The release configuration of `x86_emu.dll`
+loads 16 engine files, so create `dosbox_emu1.dll` ... `dosbox_emu15.dll` as copies of the built
+`dosbox_emu.dll` before packaging; each copy is loaded as its own module and provides one emulation
+instance. The debug configuration loads only `dosbox_emu.dll`.
 
 ### Build ARM32 Version
 
@@ -50,9 +61,12 @@ make -j$(nproc)
 ```
 
 Output DLLs will be in `release/` directory:
-- `yact_emu_arm.dll` - Emulation core (ARM32)
-- `x86_emu_arm.dll` - Wrapper DLL (ARM32)
-- `supp_arm.dll` - Utility DLL (ARM32)
+- `yact_emu.dll` - experimental emulation core (ARM32); not used at runtime
+- `x86_emu.dll` - emulator front end (ARM32)
+- `supp.nt.dll` - support DLL (ARM32)
+
+The same note as for the x86 build applies: the DOSBox/Bochs engines and `cbacks.nt.dll` come from
+`yact.sln`, not from this Makefile.
 
 ## Makefile Variants
 
@@ -70,12 +84,25 @@ Output DLLs will be in `release/` directory:
 
 ## Deployment to Windows RT Device
 
-1. Copy ARM DLLs to your Windows RT device:
-   - `release/yact_emu_arm.dll`
-   - `release/x86_emu_arm.dll`
-   - `release/supp_arm.dll`
+1. Install the Win86emun package built from `yact.sln` with the installer. The emulator files are
+   placed in the Windows directory (`%SystemRoot%`), not next to the application:
 
-2. Place them in the same directory as your x86 application, or in `C:\Windows\System32\`
+   - `x86_emu.dll` - emulator front end; it loads the engines on first use
+   - `dosbox_emu.dll` + `dosbox_emu1.dll` ... `dosbox_emu15.dll` - primary engine (release build
+     requires all 16 files)
+   - `bochs_emu.dll` - fallback engine
+   - `cbacks.nt.dll` - callback layer
+   - `supp.nt.dll` - support DLL
+   - `Launcher.exe`, `cpihook.dll`, `peldr.nt.dll`, the `*.86.dll` stub DLLs and the `*.nt.dll`
+     system DLLs
+
+   The names are fixed: `x86_emu.dll` loads `"cbacks.nt.dll"`, `"dosbox_emu.dll"` and
+   `"bochs_emu.dll"` with `LoadLibraryA()`, so a renamed file (for example `x86_emu_arm.dll`) is not
+   found and the process exits during startup. `yact_emu.dll` is an experimental engine; it is not
+   installed and never loaded.
+
+2. Start the application through `Launcher.exe` rather than copying DLLs next to the application
+   executable.
 
 3. **Important**: Your Windows RT device must be jailbroken to run x86 applications.
 
@@ -86,8 +113,15 @@ Output DLLs will be in `release/` directory:
 - `FASTCALL` macro redefined: This is harmless.
 
 ### Runtime Issues
-- Some x86 applications may not work due to unimplemented SSE/MMX instructions.
+- Some x86 applications may not work because SSE/SSE2 instructions are not implemented by any
+  engine (`dosbox_emu.dll` has no XMM registers, `bochs_emu.dll` is built with `BX_CPU_LEVEL 5`).
+  MMX is implemented by the DOSBox engine only.
 - Applications requiring privileged instructions will fail.
+
+### Debug Logging
+- Win86emun writes `%TEMP%\win86emu.log` through `supp.nt.dll` (levels, rotation, per-call
+  tracing, unhandled exceptions). See [LOGGING.md](./LOGGING.md) for the format, the registry
+  settings (`LogLevel`, `LogFile`, `LogMaxSizeKB`) and the host tests.
 
 ## Testing
 
@@ -109,13 +143,17 @@ git push origin v1.0.0
 gh release create v1.0.0 \
     --title "Win86emu v1.0.0" \
     --notes "ARM32 (Windows RT) and x86 binaries. Jailbreak required for ARM." \
-    release/yact_emu_arm.dll \
-    release/x86_emu_arm.dll \
-    release/supp_arm.dll \
-    release/yact_emu_x86.dll \
-    release/x86_emu_x86.dll \
-    release/supp_x86.dll
+    release/x86_emu.dll \
+    release/supp.nt.dll \
+    release/yact_emu.dll
 ```
+
+This only covers the files produced by the make build. A runnable package additionally needs the
+engine DLLs built from `yact.sln` (`dosbox_emu.dll` + `dosbox_emu1..15.dll`, `bochs_emu.dll`,
+`cbacks.nt.dll`), and every DLL must keep its original file name: the front end looks the engine
+DLLs up by name, so the renames performed by `release_and_test.sh` (`yact_emu.dll` ->
+`yact_emu_arm.dll`, `x86_emu.dll` -> `x86_emu_arm.dll`, `supp.nt.dll` -> `supp_arm.dll`) are only
+usable for archiving the artifacts, not for running the emulator.
 
 ## License
 
