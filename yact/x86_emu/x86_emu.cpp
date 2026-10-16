@@ -53,6 +53,7 @@ void LoadEmulatorDll()
         LogErr("Bad cbacks.nt.dll");
         ExitProcess(-10);
     }
+    LogPrint("Loaded cbacks.nt.dll");
 
     for (int i = 0; i < NUM_DOSBOXES; i++)
     {
@@ -78,6 +79,9 @@ void LoadEmulatorDll()
             ExitProcess(-1);
         }
         EmuDB_Execute[i] = (t_func1*) GetProcAddress(HM, "EmuExecute");
+        if (EmuDB_Execute[i] == 0)
+            LogWarn("%s exports no EmuExecute; this engine cannot execute code", Buff);
+        LogPrint("Loaded engine DLL %s", Buff);
     }
 
     HM = LoadLibraryA(DllBS);
@@ -98,15 +102,24 @@ void LoadEmulatorDll()
     }
 
     Loaded = true;
+    LogPrint("Loaded engine DLL %s", DllBS);
     LogInfo("Loaded x86 emulator engines");
 }
 
 EMU_EXPORT BOOL EmuInitialize(void)
 {
-    LoadEmulatorDll();
+    // Open the log first so the engine and DLL diagnostics below are captured.
     InitDebugLog();
-    WriteDebugLog("[INIT] Emulator initialized");
-    return EmuDB_Initialize[0]() && EmuBS_Initialize();
+    LogInfo("EmuInitialize: start, version %s, host emulator %s",
+        EmGetVersionString(), IsEmulatorPresent() ? "present" : "absent");
+    LogInstallUnhandledExceptionFilter();
+    LoadEmulatorDll();
+    BOOL Ok = EmuDB_Initialize[0]() && EmuBS_Initialize();
+    if (Ok)
+        LogInfo("EmuInitialize: done");
+    else
+        LogErr("EmuInitialize: engine initialization failed");
+    return Ok;
 }
 
 int __declspec(thread) FPU_cw = 0x37F;
@@ -135,6 +148,16 @@ EMU_EXPORT DWORD EmuExecute(DWORD Addr, int NParams, ...)
 {
 #define MAXARGS 8
     DWORD Tmp[MAXARGS];
+
+    // Validate NParams BEFORE reading varargs into Tmp[]. The copy loop below
+    // writes Tmp[0..NParams-1]; a negative value or NParams > MAXARGS would
+    // run past Tmp[] before the switch at the bottom could reject it.
+    if (NParams < 0 || NParams > MAXARGS)
+    {
+        LogErr("EmuExecute: invalid NParams %d", NParams);
+        printf("EmuExecute: invalid NParams %d\n", NParams);
+        ExitProcess(0);
+    }
 
     va_list argptr;
     va_start(argptr, NParams);
@@ -170,6 +193,14 @@ EMU_EXPORT DWORD EmuExecute(DWORD Addr, int NParams, ...)
         }
     }
 
+    // Log the engine that actually runs this call (DEBUG level).
+    if (UsedDosBox >= 0)
+        LogPrint("EmuExecute: engine=dosbox_emu index=%d addr=0x%08X NParams=%d tid=%lu",
+            UsedDosBox, (unsigned int) Addr, NParams, (unsigned long) GetCurrentThreadId());
+    else
+        LogPrint("EmuExecute: engine=bochs_emu addr=0x%08X NParams=%d tid=%lu",
+            (unsigned int) Addr, NParams, (unsigned long) GetCurrentThreadId());
+
     // Log emulation start
     LogEmulationStart(Addr, NParams);
 
@@ -200,6 +231,9 @@ EMU_EXPORT DWORD EmuExecute(DWORD Addr, int NParams, ...)
             break;
         case 7:
             Ret = Emu_Execute(Addr, 7, Tmp[0], Tmp[1], Tmp[2], Tmp[3], Tmp[4], Tmp[5], Tmp[6]);
+            break;
+        case 8:
+            Ret = Emu_Execute(Addr, 8, Tmp[0], Tmp[1], Tmp[2], Tmp[3], Tmp[4], Tmp[5], Tmp[6], Tmp[7]);
             break;
         default:
             LogErr("EmuExecute: too many params %d", NParams);

@@ -168,9 +168,9 @@ DWORD GetHookAddress(char* Dll, char*FuncName)
 	} else
 	{
 #ifdef _ARM_
-		sprintf(Buff,"yact_Ord%",(int)FuncName);
+		sprintf(Buff,"yact_Ord%d",(int)FuncName);
 #else
-		sprintf(Buff,"@yact_Ord%d4",(int)FuncName);
+		sprintf(Buff,"@yact_Ord%d@4",(int)FuncName);
 #endif
 	}
 	HMODULE H=LoadLibraryA(DllPath);
@@ -181,10 +181,10 @@ DWORD GetHookAddress(char* Dll, char*FuncName)
 #endif
 		LogErr("Error %d loading '%s'\n",GetLastError(),Dll);
 	}
-#ifdef _DEBUG
 	LogPrint("Binding %s from %s\n",Buff,Dll);
-#endif
 	DWORD R=(DWORD)GetProcAddress(H,Buff);
+	if(R==0)
+		LogErr("Export %s not found in %s\n",Buff,DllPath);
 	return R;
 }
 
@@ -223,6 +223,7 @@ unsigned int ProcessCallback(unsigned int reg_eax, unsigned int reg_eip)
 		tmp=((func*)(0x7fffffff&Func))(Param);
 	} __except(EXCEPTION_EXECUTE_HANDLER)
 	{
+		LogErr("Exception 0x%08X in callback 0x%08X", (unsigned int) GetExceptionCode(), (unsigned int) (0x7fffffff & Func));
 #ifdef _DEBUG
 		LogInfo("Exception in callback!");
 #endif

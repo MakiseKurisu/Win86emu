@@ -67,7 +67,7 @@ static Bitu Normal_Loop(void) {
 		if(DoOut)
 		{
 			printf("EIP=%08X: %02X %02X %02X %02X - EAX=%08X, EBX=%08X, ECX=%08X, EDX=%08X, ESI=%08X, EDI=%08X, EBP=%08X, ESP=%08X\n",reg_eip,((BYTE*)reg_eip)[0],((BYTE*)reg_eip)[1],((BYTE*)reg_eip)[2],((BYTE*)reg_eip)[3],reg_eax,reg_ebx,reg_ecx,reg_edx,reg_esi,reg_edi,reg_ebp,reg_esp);
-			LogPrint("EIP=%08X: %02X %02X %02X %02X - EAX=%08X, EBX=%08X, ECX=%08X, EDX=%08X, ESI=%08X, EDI=%08X, EBP=%08X, ESP=%08X\n",reg_eip,((BYTE*)reg_eip)[0],((BYTE*)reg_eip)[1],((BYTE*)reg_eip)[2],((BYTE*)reg_eip)[3],reg_eax,reg_ebx,reg_ecx,reg_edx,reg_esi,reg_edi,reg_ebp,reg_esp);
+			LogTrace("EIP=%08X: %02X %02X %02X %02X - EAX=%08X, EBX=%08X, ECX=%08X, EDX=%08X, ESI=%08X, EDI=%08X, EBP=%08X, ESP=%08X\n",reg_eip,((BYTE*)reg_eip)[0],((BYTE*)reg_eip)[1],((BYTE*)reg_eip)[2],((BYTE*)reg_eip)[3],reg_eax,reg_ebx,reg_ecx,reg_edx,reg_esi,reg_edi,reg_ebp,reg_esp);
 		}
 #endif
 
@@ -129,9 +129,9 @@ DWORD GetHookAddress(char* Dll, char*FuncName)
 	} else
 	{
 #ifdef _ARM_
-		sprintf(Buff,"yact_Ord%",(int)FuncName);
+		sprintf(Buff,"yact_Ord%d",(int)FuncName);
 #else
-		sprintf(Buff,"@yact_Ord%d4",(int)FuncName);
+		sprintf(Buff,"@yact_Ord%d@4",(int)FuncName);
 #endif
 	}
 	HMODULE H=LoadLibraryA(DllPath);
@@ -142,10 +142,10 @@ DWORD GetHookAddress(char* Dll, char*FuncName)
 #endif
 		LogErr("Error %d loading '%s'\n",GetLastError(),Dll);
 	}
-#ifdef _DEBUG
 	LogPrint("Binding %s from %s\n",Buff,Dll);
-#endif
 	DWORD R=(DWORD)GetProcAddress(H,Buff);
+	if(R==0)
+		LogErr("Export %s not found in %s\n",Buff,DllPath);
 	return R;
 }
 
@@ -183,6 +183,7 @@ Bitu IO_ReadD(Bitu port) {
 			tmp=((func*)(0x7fffffff&Func))(Param);
 		} __except(EXCEPTION_EXECUTE_HANDLER)
 		{
+			LogErr("Exception 0x%08X in callback 0x%08X", (unsigned int) GetExceptionCode(), (unsigned int) (0x7fffffff & Func));
 #ifdef _DEBUG
 			LogInfo("Exception in callback!");
 #endif
@@ -239,7 +240,11 @@ void ReuseStack(void *Ptr)
 }
 
 const int CPUC=1000000;
-EMU_EXPORT DWORD EmuExecute(DWORD Addr, int NParams,...)	// max 100 params
+// Args are placed on the emulated stack at ESP+4.., into the 128 bytes reserved
+// above ESP (EMU_STACK_SIZE-128), which holds at most 31 of them; there is no
+// other parameter limit in this function. The upper interface that calls this
+// one (x86_emu.dll EmuExecute) caps NParams at MAXARGS (8).
+EMU_EXPORT DWORD EmuExecute(DWORD Addr, int NParams,...)
 {
 	cpu.code.big=true;
 	cpu.stack.big=true;
