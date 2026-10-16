@@ -24,7 +24,11 @@ extern "C" {
     // Initialize engine. Return true == success.
     EMU_EXPORT BOOL EmuInitialize(void);
 
-    // Emulate code starting from Addr, passing NParams on stack (like stdcall/cdecl)
+    // Emulate code starting from Addr, passing NParams on stack (like stdcall/cdecl).
+    // NParams is the number of 32-bit arguments; the contract is 0..8. EmuExecute()
+    // in x86_emu.cpp (which defines MAXARGS = 8) rejects anything outside that
+    // range before reading an argument, so the dosbox/bochs engine exports of the
+    // same name are only ever called with 0..8.
     EMU_EXPORT DWORD EmuExecute(DWORD Addr, int NParams, ...);
 
     // Get and set FPU control word for the current emulator thread (needed to keep the same value between bochs and dosbox cores)
@@ -62,11 +66,20 @@ typedef struct _CPU_STATE {
     WORD cs, ds, es, ss, fs, gs;
 } CPU_STATE, *PCPU_STATE;
 
+/*
+ * CalcParity() returns non-zero when the low byte of v has an EVEN number of
+ * set bits, i.e. exactly when the x86 PF flag must be set.
+ *
+ * The 0x6996 nibble lookup gives the ODD-parity result, so it is inverted.
+ * (Before this fix PF was set for odd parity, which is the opposite of the
+ * architectural definition, and every flag-setting instruction inherited
+ * the error.)
+ */
 static inline DWORD CalcParity(DWORD v) {
     DWORD b = v & 0xFF;
     b ^= (b >> 4);
     b &= 0x0F;
-    return (0x6996 >> b) & 1;
+    return ((0x6996 >> b) & 1) ^ 1;
 }
 
 static inline void UpdateFlags_Add(PCPU_STATE cpu, DWORD res, DWORD op1, DWORD op2) {

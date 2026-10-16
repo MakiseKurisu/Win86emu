@@ -8,6 +8,238 @@ extern DWORD ReadMem32(DWORD addr);
 extern void WriteMem32(DWORD addr, DWORD value);
 extern int ResolveOperand(x86opcode *Op, int operand_index, DWORD *out_addr, BOOL *is_memory);
 
+/* ------------------------------------------------------------------
+ * Helpers for the 0F-prefixed instructions.
+ * ------------------------------------------------------------------ */
+
+/* SHLD/SHRD: shift Dst by Count bits, filling from Src. */
+static DWORD ShiftDual(int Size, DWORD Dst, DWORD Src, DWORD Count, BOOL Left, DWORD *pCF)
+{
+    DWORD bits = (DWORD)(Size * 8);
+    DWORD res;
+
+    Count &= 31;                       /* the count is masked to 5 bits */
+    if (Count == 0 || Count >= bits)   /* Count >= operand size is undefined */
+        return Dst & SizeMask(Size);
+
+    if (Left)
+    {
+        res = (Dst << Count) | (Src >> (bits - Count));
+        *pCF = (Dst >> (bits - Count)) & 1;
+    }
+    else
+    {
+        res = (Dst >> Count) | (Src << (bits - Count));
+        *pCF = (Dst >> (Count - 1)) & 1;
+    }
+    return res & SizeMask(Size);
+}
+
+/* BT/BTS/BTR/BTC with a bit index taken from a register. */
+static bool FASTCALL BitTestReg(x86opcode *Op, int Kind)
+{
+    x86operand Dst;
+    int size;
+    DWORD idx, bitval = 0, byteoff = 0, bitpos = 0;
+    BOOL is_mem;
+
+    FetchModRM(Op);
+    GetRmOperand(Op, &Dst);
+    size = OpSize32(Op);
+    idx = ReadRegSized(Op->Cpu, Op->Reg, size);
+    is_mem = Dst.IsMem;
+
+    if (is_mem)
+    {
+        /* Bit-string form: the register bit offset is signed and addresses
+         * bits before or after the operand (SDM: the byte displacement is
+         * BitOffset DIV 8 rounded towards minus infinity). */
+        int soff = (int)idx;
+        byteoff = (DWORD)(soff >> 3);
+        bitpos = (DWORD)(soff & 7);
+        bitval = (ReadMem8(Dst.Addr + byteoff) >> bitpos) & 1;
+    }
+    else
+    {
+        bitpos = idx & (DWORD)(size * 8 - 1);
+        bitval = (ReadRegSized(Op->Cpu, Dst.Reg, size) >> bitpos) & 1;
+    }
+
+    if (bitval) Op->Cpu->eflags |= EFLAGS_CF;
+    else Op->Cpu->eflags &= ~EFLAGS_CF;
+
+    if (Kind != 0)
+    {
+        if (is_mem)
+        {
+            BYTE b = ReadMem8(Dst.Addr + byteoff);
+            if (Kind == 1) b |= (BYTE)(1 << bitpos);
+            else if (Kind == 2) b &= (BYTE)~(1 << bitpos);
+            else b ^= (BYTE)(1 << bitpos);
+            WriteMem8(Dst.Addr + byteoff, b);
+        }
+        else
+        {
+            DWORD v = ReadRegSized(Op->Cpu, Dst.Reg, size);
+            if (Kind == 1) v |= (1u << bitpos);
+            else if (Kind == 2) v &= ~(1u << bitpos);
+            else v ^= (1u << bitpos);
+            WriteRegSized(Op->Cpu, Dst.Reg, size, v);
+        }
+    }
+    return false;
+}
+
+/* BT/BTS/BTR/BTC with an 8-bit immediate bit index (group 8). */
+static bool FASTCALL BitTestImm(x86opcode *Op, int Kind)
+{
+    x86operand Dst;
+    int size;
+    DWORD idx, bitval = 0, byteoff = 0, bitpos = 0;
+    BOOL is_mem;
+
+    /* FetchModRM() has already been done by CmdBA, which needs Op->Reg to
+     * select the operation. */
+    GetRmOperand(Op, &Dst);
+    size = OpSize32(Op);
+    idx = FetchImm8(Op);
+    is_mem = Dst.IsMem;
+
+    if (is_mem)
+    {
+        byteoff = idx >> 3;
+        bitpos = idx & 7;
+        bitval = (ReadMem8(Dst.Addr + byteoff) >> bitpos) & 1;
+    }
+    else
+    {
+        bitpos = idx & (DWORD)(size * 8 - 1);
+        bitval = (ReadRegSized(Op->Cpu, Dst.Reg, size) >> bitpos) & 1;
+    }
+
+    if (bitval) Op->Cpu->eflags |= EFLAGS_CF;
+    else Op->Cpu->eflags &= ~EFLAGS_CF;
+
+    if (Kind != 0)
+    {
+        if (is_mem)
+        {
+            BYTE b = ReadMem8(Dst.Addr + byteoff);
+            if (Kind == 1) b |= (BYTE)(1 << bitpos);
+            else if (Kind == 2) b &= (BYTE)~(1 << bitpos);
+            else b ^= (BYTE)(1 << bitpos);
+            WriteMem8(Dst.Addr + byteoff, b);
+        }
+        else
+        {
+            DWORD v = ReadRegSized(Op->Cpu, Dst.Reg, size);
+            if (Kind == 1) v |= (1u << bitpos);
+            else if (Kind == 2) v &= ~(1u << bitpos);
+            else v ^= (1u << bitpos);
+            WriteRegSized(Op->Cpu, Dst.Reg, size, v);
+        }
+    }
+    return false;
+}
+
+/* SHLD/SHRD r/m, r, imm8 or CL */
+static bool FASTCALL ShiftDualOp(x86opcode *Op, BOOL Left, BOOL CountInCL)
+{
+    x86operand Dst;
+    int size;
+    DWORD count, v, src, cf = 0, res, msb;
+
+    FetchModRM(Op);
+    GetRmOperand(Op, &Dst);
+    size = OpSize32(Op);
+    count = CountInCL ? ReadRegSized(Op->Cpu, 1, 1) : (DWORD)FetchImm8(Op);
+    v = LoadOperand(Op, &Dst, size);
+    src = ReadRegSized(Op->Cpu, Op->Reg, size);
+
+    if ((count & 31) == 0 || (count & 31) >= (DWORD)(size * 8))
+        return false;                       /* no shift: flags are not affected */
+
+    res = ShiftDual(size, v, src, count, Left, &cf);
+    StoreOperand(Op, &Dst, size, res);
+
+    FlagsLogical(Op->Cpu, size, res);       /* SF/ZF/PF from the result */
+    if (cf) Op->Cpu->eflags |= EFLAGS_CF;
+    if ((count & 31) == 1)                  /* OF is defined only for count==1 */
+    {
+        /* SDM: OF is set when the MSB of the original destination differs
+         * from the MSB of the result (for SHLD this is also written as
+         * MSB(result) XOR CF, because for count==1 CF is the old MSB). */
+        msb = (v & SizeSign(size)) ? 1u : 0u;
+        if (msb != ((res & SizeSign(size)) ? 1u : 0u)) Op->Cpu->eflags |= EFLAGS_OF;
+    }
+    return false;
+}
+
+/* BSF / BSR */
+static bool FASTCALL BitScan(x86opcode *Op, BOOL Reverse)
+{
+    x86operand Src;
+    int size;
+    DWORD v, i;
+
+    FetchModRM(Op);
+    GetRmOperand(Op, &Src);
+    size = OpSize32(Op);
+    v = LoadOperand(Op, &Src, size) & SizeMask(size);
+
+    if (v == 0)
+    {
+        Op->Cpu->eflags |= EFLAGS_ZF;       /* destination is undefined */
+        return false;
+    }
+    if (Reverse)
+    {
+        for (i = size * 8 - 1; i > 0; i--)
+            if (v & (1u << i)) break;
+    }
+    else
+    {
+        for (i = 0; i < (DWORD)(size * 8); i++)
+            if (v & (1u << i)) break;
+    }
+    WriteRegSized(Op->Cpu, Op->Reg, size, i);
+    Op->Cpu->eflags &= ~EFLAGS_ZF;
+    return false;
+}
+
+/* IMUL r, r/m */
+static bool FASTCALL ImulReg(x86opcode *Op)
+{
+    x86operand Src;
+    int size;
+    DWORD a, b, res;
+    long long prod;
+
+    FetchModRM(Op);
+    GetRmOperand(Op, &Src);
+    size = OpSize32(Op);
+    a = ReadRegSized(Op->Cpu, Op->Reg, size);
+    b = LoadOperand(Op, &Src, size);
+
+    if (size == 2)
+    {
+        prod = (long long)(int)(short)a * (long long)(int)(short)b;
+        res = (DWORD)prod;
+        WriteRegSized(Op->Cpu, Op->Reg, 2, res);
+        if ((long long)(int)(short)res != prod) Op->Cpu->eflags |= (EFLAGS_CF | EFLAGS_OF);
+        else Op->Cpu->eflags &= ~(EFLAGS_CF | EFLAGS_OF);
+    }
+    else
+    {
+        prod = (long long)(int)a * (long long)(int)b;
+        res = (DWORD)prod;
+        WriteRegSized(Op->Cpu, Op->Reg, 4, res);
+        if ((long long)(int)res != prod) Op->Cpu->eflags |= (EFLAGS_CF | EFLAGS_OF);
+        else Op->Cpu->eflags &= ~(EFLAGS_CF | EFLAGS_OF);
+    }
+    return false;
+}
+
 static bool FASTCALL Cmd00(x86opcode *Op)
 {
     return false;
@@ -164,8 +396,12 @@ static bool FASTCALL Cmd1E(x86opcode *Op)
     return false;
 }
 
-static bool FASTCALL Cmd1F(x86opcode *Op)
+static bool FASTCALL Cmd1F(x86opcode *Op) // NOP r/m (multi-byte NOP)
 {
+    x86operand Ignored;
+    FetchModRM(Op);
+    GetRmOperand(Op, &Ignored);   /* consume ModR/M, SIB and displacement */
+    Op->Mnemonics = "nop";
     return false;
 }
 
@@ -334,85 +570,37 @@ static bool FASTCALL Cmd3F(x86opcode *Op)
     return false;
 }
 
-static bool FASTCALL Cmd40(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd40(x86opcode *Op) { return DoCmovcc(Op, CC_O); }
 
-static bool FASTCALL Cmd41(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd41(x86opcode *Op) { return DoCmovcc(Op, CC_NO); }
 
-static bool FASTCALL Cmd42(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd42(x86opcode *Op) { return DoCmovcc(Op, CC_B); }
 
-static bool FASTCALL Cmd43(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd43(x86opcode *Op) { return DoCmovcc(Op, CC_AE); }
 
-static bool FASTCALL Cmd44(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd44(x86opcode *Op) { return DoCmovcc(Op, CC_E); }
 
-static bool FASTCALL Cmd45(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd45(x86opcode *Op) { return DoCmovcc(Op, CC_NE); }
 
-static bool FASTCALL Cmd46(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd46(x86opcode *Op) { return DoCmovcc(Op, CC_BE); }
 
-static bool FASTCALL Cmd47(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd47(x86opcode *Op) { return DoCmovcc(Op, CC_A); }
 
-static bool FASTCALL Cmd48(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd48(x86opcode *Op) { return DoCmovcc(Op, CC_S); }
 
-static bool FASTCALL Cmd49(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd49(x86opcode *Op) { return DoCmovcc(Op, CC_NS); }
 
-static bool FASTCALL Cmd4A(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd4A(x86opcode *Op) { return DoCmovcc(Op, CC_P); }
 
-static bool FASTCALL Cmd4B(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd4B(x86opcode *Op) { return DoCmovcc(Op, CC_NP); }
 
-static bool FASTCALL Cmd4C(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd4C(x86opcode *Op) { return DoCmovcc(Op, CC_L); }
 
-static bool FASTCALL Cmd4D(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd4D(x86opcode *Op) { return DoCmovcc(Op, CC_GE); }
 
-static bool FASTCALL Cmd4E(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd4E(x86opcode *Op) { return DoCmovcc(Op, CC_LE); }
 
-static bool FASTCALL Cmd4F(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd4F(x86opcode *Op) { return DoCmovcc(Op, CC_G); }
 
 static bool FASTCALL Cmd50(x86opcode *Op)
 {
@@ -654,165 +842,69 @@ static bool FASTCALL Cmd7F(x86opcode *Op)
     return false;
 }
 
-static bool FASTCALL Cmd80(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd80(x86opcode *Op) { return DoJcc32(Op, CC_O); }
 
-static bool FASTCALL Cmd81(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd81(x86opcode *Op) { return DoJcc32(Op, CC_NO); }
 
-static bool FASTCALL Cmd82(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd82(x86opcode *Op) { return DoJcc32(Op, CC_B); }
 
-static bool FASTCALL Cmd83(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd83(x86opcode *Op) { return DoJcc32(Op, CC_AE); }
 
-static bool FASTCALL Cmd84(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd84(x86opcode *Op) { return DoJcc32(Op, CC_E); }
 
-static bool FASTCALL Cmd85(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd85(x86opcode *Op) { return DoJcc32(Op, CC_NE); }
 
-static bool FASTCALL Cmd86(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd86(x86opcode *Op) { return DoJcc32(Op, CC_BE); }
 
-static bool FASTCALL Cmd87(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd87(x86opcode *Op) { return DoJcc32(Op, CC_A); }
 
-static bool FASTCALL Cmd88(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd88(x86opcode *Op) { return DoJcc32(Op, CC_S); }
 
-static bool FASTCALL Cmd89(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd89(x86opcode *Op) { return DoJcc32(Op, CC_NS); }
 
-static bool FASTCALL Cmd8A(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd8A(x86opcode *Op) { return DoJcc32(Op, CC_P); }
 
-static bool FASTCALL Cmd8B(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd8B(x86opcode *Op) { return DoJcc32(Op, CC_NP); }
 
-static bool FASTCALL Cmd8C(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd8C(x86opcode *Op) { return DoJcc32(Op, CC_L); }
 
-static bool FASTCALL Cmd8D(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd8D(x86opcode *Op) { return DoJcc32(Op, CC_GE); }
 
-static bool FASTCALL Cmd8E(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd8E(x86opcode *Op) { return DoJcc32(Op, CC_LE); }
 
-static bool FASTCALL Cmd8F(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd8F(x86opcode *Op) { return DoJcc32(Op, CC_G); }
 
-static bool FASTCALL Cmd90(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd90(x86opcode *Op) { return DoSetcc(Op, CC_O); }
 
-static bool FASTCALL Cmd91(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd91(x86opcode *Op) { return DoSetcc(Op, CC_NO); }
 
-static bool FASTCALL Cmd92(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd92(x86opcode *Op) { return DoSetcc(Op, CC_B); }
 
-static bool FASTCALL Cmd93(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd93(x86opcode *Op) { return DoSetcc(Op, CC_AE); }
 
-static bool FASTCALL Cmd94(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd94(x86opcode *Op) { return DoSetcc(Op, CC_E); }
 
-static bool FASTCALL Cmd95(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd95(x86opcode *Op) { return DoSetcc(Op, CC_NE); }
 
-static bool FASTCALL Cmd96(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd96(x86opcode *Op) { return DoSetcc(Op, CC_BE); }
 
-static bool FASTCALL Cmd97(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd97(x86opcode *Op) { return DoSetcc(Op, CC_A); }
 
-static bool FASTCALL Cmd98(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd98(x86opcode *Op) { return DoSetcc(Op, CC_S); }
 
-static bool FASTCALL Cmd99(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd99(x86opcode *Op) { return DoSetcc(Op, CC_NS); }
 
-static bool FASTCALL Cmd9A(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd9A(x86opcode *Op) { return DoSetcc(Op, CC_P); }
 
-static bool FASTCALL Cmd9B(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd9B(x86opcode *Op) { return DoSetcc(Op, CC_NP); }
 
-static bool FASTCALL Cmd9C(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd9C(x86opcode *Op) { return DoSetcc(Op, CC_L); }
 
-static bool FASTCALL Cmd9D(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd9D(x86opcode *Op) { return DoSetcc(Op, CC_GE); }
 
-static bool FASTCALL Cmd9E(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd9E(x86opcode *Op) { return DoSetcc(Op, CC_LE); }
 
-static bool FASTCALL Cmd9F(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL Cmd9F(x86opcode *Op) { return DoSetcc(Op, CC_G); }
 
 static bool FASTCALL CmdA0(x86opcode *Op)
 {
@@ -855,20 +947,11 @@ static bool FASTCALL CmdA2(x86opcode *Op)
     return false;
 }
 
-static bool FASTCALL CmdA3(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL CmdA3(x86opcode *Op) { return BitTestReg(Op, 0); }
 
-static bool FASTCALL CmdA4(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL CmdA4(x86opcode *Op) { return ShiftDualOp(Op, TRUE, FALSE); }
 
-static bool FASTCALL CmdA5(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL CmdA5(x86opcode *Op) { return ShiftDualOp(Op, TRUE, TRUE); }
 
 static bool FASTCALL CmdA6(x86opcode *Op)
 {
@@ -895,92 +978,50 @@ static bool FASTCALL CmdAA(x86opcode *Op)
     return false;
 }
 
-static bool FASTCALL CmdAB(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL CmdAB(x86opcode *Op) { return BitTestReg(Op, 1); }
 
-static bool FASTCALL CmdAC(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL CmdAC(x86opcode *Op) { return ShiftDualOp(Op, FALSE, FALSE); }
 
-static bool FASTCALL CmdAD(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL CmdAD(x86opcode *Op) { return ShiftDualOp(Op, FALSE, TRUE); }
 
 static bool FASTCALL CmdAE(x86opcode *Op)
 {
     return false;
 }
 
-static bool FASTCALL CmdAF(x86opcode *Op)
+static bool FASTCALL CmdAF(x86opcode *Op) { return ImulReg(Op); }
+
+/* CMPXCHG r/m, r (0F B0/B1).  The accumulator is compared with r/m: when
+ * they are equal r is stored into r/m, otherwise r/m is loaded into the
+ * accumulator.  The comparison and the stores use the operand size. */
+static bool FASTCALL Cmpxchg(x86opcode *Op, int Size)
 {
+    x86operand Rm;
+    DWORD a, b;
+
+    FetchModRM(Op);
+    GetRmOperand(Op, &Rm);
+    a = ReadRegSized(Op->Cpu, 0, Size);        /* AL / AX / EAX */
+    b = LoadOperand(Op, &Rm, Size);
+    FlagsSub(Op->Cpu, Size, a - b, a, b);
+
+    if (Op->Cpu->eflags & EFLAGS_ZF)
+        StoreOperand(Op, &Rm, Size, ReadRegSized(Op->Cpu, Op->Reg, Size));
+    else
+        WriteRegSized(Op->Cpu, 0, Size, b);
     return false;
 }
 
-static bool FASTCALL CmdB0(x86opcode *Op)
-{
-    // CMPXCHG r/m8, reg (0F B0)
-    FetchModRM(Op);
-    DWORD addr; BOOL is_mem;
-    int rm_idx = ResolveOperand(Op, 0, &addr, &is_mem);
-    BYTE op1 = is_mem ? (BYTE)ReadMem32(addr) : (BYTE)ReadReg(Op->Cpu, rm_idx);
-    int reg_idx = ResolveOperand(Op, 1, &addr, &is_mem);
-    BYTE al = (BYTE)(Op->Cpu->eax & 0xFF);
-    BYTE op2 = (BYTE)ReadReg(Op->Cpu, reg_idx);
-    
-    DWORD res = (DWORD)al - (DWORD)op1;
-    UpdateFlags_Sub(Op->Cpu, res, (DWORD)al, (DWORD)op1);
-    
-    if (Op->Cpu->eflags & EFLAGS_ZF) {
-        // ZF=1: write reg to r/m
-        if (is_mem) WriteMem32(addr, (DWORD)op2);
-        else WriteReg(Op->Cpu, rm_idx, (DWORD)op2);
-    } else {
-        // ZF=0: write r/m to AL
-        Op->Cpu->eax = (Op->Cpu->eax & 0xFFFFFF00) | op1;
-    }
-    Op->Cpu->eip += 2;
-    return false;
-}
+static bool FASTCALL CmdB0(x86opcode *Op) { return Cmpxchg(Op, 1); }
 
-static bool FASTCALL CmdB1(x86opcode *Op)
-{
-    // CMPXCHG r/m32, reg (0F B1)
-    FetchModRM(Op);
-    DWORD addr; BOOL is_mem;
-    int rm_idx = ResolveOperand(Op, 0, &addr, &is_mem);
-    DWORD op1 = is_mem ? ReadMem32(addr) : ReadReg(Op->Cpu, rm_idx);
-    int reg_idx = ResolveOperand(Op, 1, &addr, &is_mem);
-    DWORD eax = Op->Cpu->eax;
-    DWORD op2 = ReadReg(Op->Cpu, reg_idx);
-    
-    DWORD res = eax - op1;
-    UpdateFlags_Sub(Op->Cpu, res, eax, op1);
-    
-    if (Op->Cpu->eflags & EFLAGS_ZF) {
-        // ZF=1: write reg to r/m
-        if (is_mem) WriteMem32(addr, op2);
-        else WriteReg(Op->Cpu, rm_idx, op2);
-    } else {
-        // ZF=0: write r/m to EAX
-        Op->Cpu->eax = op1;
-    }
-    Op->Cpu->eip += 2;
-    return false;
-}
+static bool FASTCALL CmdB1(x86opcode *Op) { return Cmpxchg(Op, OpSize32(Op)); }
 
 static bool FASTCALL CmdB2(x86opcode *Op)
 {
     return false;
 }
 
-static bool FASTCALL CmdB3(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL CmdB3(x86opcode *Op) { return BitTestReg(Op, 2); }
 
 static bool FASTCALL CmdB4(x86opcode *Op)
 {
@@ -992,15 +1033,9 @@ static bool FASTCALL CmdB5(x86opcode *Op)
     return false;
 }
 
-static bool FASTCALL CmdB6(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL CmdB6(x86opcode *Op) { return MovExtend(Op, 1, FALSE); }
 
-static bool FASTCALL CmdB7(x86opcode *Op)
-{
-    return false;
-}
+static bool FASTCALL CmdB7(x86opcode *Op) { return MovExtend(Op, 2, FALSE); }
 
 static bool FASTCALL CmdB8(x86opcode *Op)
 {
@@ -1012,88 +1047,52 @@ static bool FASTCALL CmdB9(x86opcode *Op)
     return false;
 }
 
-static bool FASTCALL CmdBA(x86opcode *Op)
+static bool FASTCALL CmdBA(x86opcode *Op) // group 8: BT/BTS/BTR/BTC r/m, imm8
 {
-    return false;
-}
-
-static bool FASTCALL CmdBB(x86opcode *Op)
-{
-    return false;
-}
-
-static bool FASTCALL CmdBC(x86opcode *Op)
-{
-    return false;
-}
-
-static bool FASTCALL CmdBD(x86opcode *Op)
-{
-    return false;
-}
-
-static bool FASTCALL CmdBE(x86opcode *Op)
-{
-    return false;
-}
-
-static bool FASTCALL CmdBF(x86opcode *Op)
-{
-    return false;
-}
-
-static bool FASTCALL CmdC0(x86opcode *Op)
-{
-    // XADD r/m8, reg (0F C0)
     FetchModRM(Op);
-    DWORD addr; BOOL is_mem;
-    int rm_idx = ResolveOperand(Op, 0, &addr, &is_mem);
-    BYTE op1 = is_mem ? (BYTE)ReadMem32(addr) : (BYTE)ReadReg(Op->Cpu, rm_idx);
-    int reg_idx = ResolveOperand(Op, 1, &addr, &is_mem);
-    BYTE op2 = (BYTE)ReadReg(Op->Cpu, reg_idx);
-    
-    BYTE sum = op1 + op2;
-    DWORD res = (DWORD)op1 + (DWORD)op2;
-    UpdateFlags_Add(Op->Cpu, res, (DWORD)op1, (DWORD)op2);
-    
-    // Write sum to r/m
-    if (is_mem) WriteMem32(addr, (DWORD)sum);
-    else {
-        // For 8-bit register write, preserve upper bits
-        DWORD oldVal = ReadReg(Op->Cpu, rm_idx);
-        WriteReg(Op->Cpu, rm_idx, (oldVal & 0xFFFFFF00) | sum);
+    switch (Op->Reg)
+    {
+        case 4: return BitTestImm(Op, 0);
+        case 5: return BitTestImm(Op, 1);
+        case 6: return BitTestImm(Op, 2);
+        case 7: return BitTestImm(Op, 3);
     }
-    
-    // Write original r/m value to reg (8-bit: only lower 8 bits affected)
-    DWORD oldReg = ReadReg(Op->Cpu, reg_idx);
-    WriteReg(Op->Cpu, reg_idx, (oldReg & 0xFFFFFF00) | op1);
-    Op->Cpu->eip += 2;
+    Op->Mnemonics = "invalid";
+    Op->Finished = true;
     return false;
 }
 
-static bool FASTCALL CmdC1(x86opcode *Op)
+static bool FASTCALL CmdBB(x86opcode *Op) { return BitTestReg(Op, 3); }
+
+static bool FASTCALL CmdBC(x86opcode *Op) { return BitScan(Op, FALSE); }
+
+static bool FASTCALL CmdBD(x86opcode *Op) { return BitScan(Op, TRUE); }
+
+static bool FASTCALL CmdBE(x86opcode *Op) { return MovExtend(Op, 1, TRUE); }
+
+static bool FASTCALL CmdBF(x86opcode *Op) { return MovExtend(Op, 2, TRUE); }
+
+/* XADD r/m, r (0F C0/C1): store the sum in the destination and the old
+ * destination value in the register. */
+static bool FASTCALL Xadd(x86opcode *Op, int Size)
 {
-    // XADD r/m32, reg (0F C1)
+    x86operand Rm;
+    DWORD a, b, sum;
+
     FetchModRM(Op);
-    DWORD addr; BOOL is_mem;
-    int rm_idx = ResolveOperand(Op, 0, &addr, &is_mem);
-    DWORD op1 = is_mem ? ReadMem32(addr) : ReadReg(Op->Cpu, rm_idx);
-    int reg_idx = ResolveOperand(Op, 1, &addr, &is_mem);
-    DWORD op2 = ReadReg(Op->Cpu, reg_idx);
-    
-    DWORD sum = op1 + op2;
-    UpdateFlags_Add(Op->Cpu, sum, op1, op2);
-    
-    // Write sum to r/m
-    if (is_mem) WriteMem32(addr, sum);
-    else WriteReg(Op->Cpu, rm_idx, sum);
-    
-    // Write original r/m value to reg
-    WriteReg(Op->Cpu, reg_idx, op1);
-    
-    Op->Cpu->eip += 2;
+    GetRmOperand(Op, &Rm);
+    a = LoadOperand(Op, &Rm, Size);            /* old r/m value */
+    b = ReadRegSized(Op->Cpu, Op->Reg, Size);
+    sum = a + b;
+    FlagsAdd(Op->Cpu, Size, sum, a, b);
+    StoreOperand(Op, &Rm, Size, sum);
+    WriteRegSized(Op->Cpu, Op->Reg, Size, a);
     return false;
 }
+
+static bool FASTCALL CmdC0(x86opcode *Op) { return Xadd(Op, 1); }
+
+static bool FASTCALL CmdC1(x86opcode *Op) { return Xadd(Op, OpSize32(Op)); }
 
 static bool FASTCALL CmdC2(x86opcode *Op)
 {
@@ -1125,43 +1124,75 @@ static bool FASTCALL CmdC7(x86opcode *Op)
     return false;
 }
 
-static bool FASTCALL CmdC8(x86opcode *Op)
+static bool FASTCALL CmdC8(x86opcode *Op) // BSWAP r32
 {
+    DWORD v = ReadRegSized(Op->Cpu, 0, 4);
+    v = ((v & 0x000000FFu) << 24) | ((v & 0x0000FF00u) << 8)
+      | ((v & 0x00FF0000u) >> 8)  | ((v & 0xFF000000u) >> 24);
+    WriteRegSized(Op->Cpu, 0, 4, v);
     return false;
 }
 
-static bool FASTCALL CmdC9(x86opcode *Op)
+static bool FASTCALL CmdC9(x86opcode *Op) // BSWAP r32
 {
+    DWORD v = ReadRegSized(Op->Cpu, 1, 4);
+    v = ((v & 0x000000FFu) << 24) | ((v & 0x0000FF00u) << 8)
+      | ((v & 0x00FF0000u) >> 8)  | ((v & 0xFF000000u) >> 24);
+    WriteRegSized(Op->Cpu, 1, 4, v);
     return false;
 }
 
-static bool FASTCALL CmdCA(x86opcode *Op)
+static bool FASTCALL CmdCA(x86opcode *Op) // BSWAP r32
 {
+    DWORD v = ReadRegSized(Op->Cpu, 2, 4);
+    v = ((v & 0x000000FFu) << 24) | ((v & 0x0000FF00u) << 8)
+      | ((v & 0x00FF0000u) >> 8)  | ((v & 0xFF000000u) >> 24);
+    WriteRegSized(Op->Cpu, 2, 4, v);
     return false;
 }
 
-static bool FASTCALL CmdCB(x86opcode *Op)
+static bool FASTCALL CmdCB(x86opcode *Op) // BSWAP r32
 {
+    DWORD v = ReadRegSized(Op->Cpu, 3, 4);
+    v = ((v & 0x000000FFu) << 24) | ((v & 0x0000FF00u) << 8)
+      | ((v & 0x00FF0000u) >> 8)  | ((v & 0xFF000000u) >> 24);
+    WriteRegSized(Op->Cpu, 3, 4, v);
     return false;
 }
 
-static bool FASTCALL CmdCC(x86opcode *Op)
+static bool FASTCALL CmdCC(x86opcode *Op) // BSWAP r32
 {
+    DWORD v = ReadRegSized(Op->Cpu, 4, 4);
+    v = ((v & 0x000000FFu) << 24) | ((v & 0x0000FF00u) << 8)
+      | ((v & 0x00FF0000u) >> 8)  | ((v & 0xFF000000u) >> 24);
+    WriteRegSized(Op->Cpu, 4, 4, v);
     return false;
 }
 
-static bool FASTCALL CmdCD(x86opcode *Op)
+static bool FASTCALL CmdCD(x86opcode *Op) // BSWAP r32
 {
+    DWORD v = ReadRegSized(Op->Cpu, 5, 4);
+    v = ((v & 0x000000FFu) << 24) | ((v & 0x0000FF00u) << 8)
+      | ((v & 0x00FF0000u) >> 8)  | ((v & 0xFF000000u) >> 24);
+    WriteRegSized(Op->Cpu, 5, 4, v);
     return false;
 }
 
-static bool FASTCALL CmdCE(x86opcode *Op)
+static bool FASTCALL CmdCE(x86opcode *Op) // BSWAP r32
 {
+    DWORD v = ReadRegSized(Op->Cpu, 6, 4);
+    v = ((v & 0x000000FFu) << 24) | ((v & 0x0000FF00u) << 8)
+      | ((v & 0x00FF0000u) >> 8)  | ((v & 0xFF000000u) >> 24);
+    WriteRegSized(Op->Cpu, 6, 4, v);
     return false;
 }
 
-static bool FASTCALL CmdCF(x86opcode *Op)
+static bool FASTCALL CmdCF(x86opcode *Op) // BSWAP r32
 {
+    DWORD v = ReadRegSized(Op->Cpu, 7, 4);
+    v = ((v & 0x000000FFu) << 24) | ((v & 0x0000FF00u) << 8)
+      | ((v & 0x00FF0000u) >> 8)  | ((v & 0xFF000000u) >> 24);
+    WriteRegSized(Op->Cpu, 7, 4, v);
     return false;
 }
 
@@ -1405,6 +1436,32 @@ static bool FASTCALL CmdFF(x86opcode *Op)
     return false;
 }
 
+/* Dispatch table for the 0F (two-byte) opcode space.
+ *
+ * The handlers listed below are still placeholders (they return false without
+ * changing any CPU state); they are NOT implemented instructions:
+ *
+ *   00-07      system (SLDT/STR/LLDT/LTR/VERR/VERW, SGDT/SIDT/LGDT/LIDT/
+ *              SMSW/LMSW/INVLPG, LAR/LSL, SYSCALL/CLTS/SYSRET)
+ *   08 09      INVD / WBINVD            0A-0F      reserved / UD2 / prefetch
+ *   10-17      SSE moves                 18-1F      hints / NOP
+ *   20-27      MOV to/from CR/DR/TR      28-2F      SSE
+ *   30 32-37   MSR / SENTER / GETSEC     38-3F      three-byte opcode escapes
+ *   50-5F      SSE                       60-6F      MMX
+ *   70-7F      MMX / SSE shuffle         A0 A1      PUSH/POP FS
+ *   A6 A7      undocumented 386          A8 A9      PUSH/POP GS
+ *   AA         RSM                       AE         SSE control / fences
+ *   B2 B4 B5   LSS / LFS / LGS           B8 B9      JMPE / UD1
+ *   C2-C7      SSE / MOVNTI / GRP9        D0-D7      MMX / SSE2
+ *   D8-DF      MMX / SSE2                E0-E7      MMX / SSE2
+ *   E8-EF      MMX                       F0-FF      MMX / SSE / UD0
+ *
+ * They are intentionally left as placeholders: dosbox_emu.dll implements the
+ * integer, MMX and some system instructions (but no SSE), bochs_emu.dll is a
+ * full CPU core built with BX_CPU_LEVEL 5 (no MMX/SSE), and this engine is not
+ * loaded at runtime.  Executing one of them here is a silent no-op, not
+ * "support".
+ */
 COMMAND *TwoByteCmds[256] =
 {
     Cmd00, Cmd01, Cmd02, Cmd03, Cmd04, Cmd05, Cmd06, Cmd07, Cmd08, Cmd09, Cmd0A, Cmd0B, Cmd0C, Cmd0D, Cmd0E, Cmd0F,
